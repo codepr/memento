@@ -19,8 +19,8 @@ currently supports basic operations:
 - QUIT/EXIT
 
 All commands are case insensitive, so not strictly uppercase. Shibui can be used
-as a basic message broker through command PUB/SUB to pulish messages to multiple
-subscriber, using a key as a topic.
+as a basic message broker through commands PUB/SUB to pulish messages to
+multiple subscriber, using a key as a topic.
 Shibui server expect an optional arg to set an arbitrary host to listen on port
 6373, otherwise localhost will be automatically set.
 Actually there's no client console so it can be tested using a generic tcp
@@ -28,6 +28,7 @@ client like telnet or netcat.
 
 * TODO
 
-- CLI to send commands and format output (easy)
-- Additional commands (easy)
+- Persistence on disk, maybe through logging
+- CLI to send commands and format output
+- Additional commands
 - Distribution system (fairly hard)

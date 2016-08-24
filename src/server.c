@@ -230,10 +230,10 @@ void start_server(const char *host) {
                         send(events[i].data.fd, "NOT FOUND\n", 10, 0);
                         break;
                     case MAP_FULL:
-                        send(events[i].data.fd, "MAP FULL\n", 9, 0);
+                        send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
                         break;
                     case MAP_OMEM:
-                        send(events[i].data.fd, "MAP FULL\n", 9, 0);
+                        send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
                         break;
                     default:
                         /* send(events[1].data.fd, "\n", 1, 0); */

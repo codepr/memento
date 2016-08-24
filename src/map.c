@@ -6,9 +6,6 @@
 #include <sys/types.h>
 #include "map.h"
 
-#define INITIAL_SIZE (256)
-#define MAX_CHAIN_LENGTH (8)
-
 /*
  * Return an empty hashmap, or NULL on failure.
  */
@@ -29,9 +26,9 @@ map_t m_create() {
     return m;
 }
 
-/* The implementation here was originally done by Gary S. Brown.  I have
-   borrowed the tables directly, and made some minor changes to the
-   crc32-function (including changing the interface). //ylo */
+/* The implementation here was originally done by Gary S. Brown. Slighltly
+ * modified by Pete Warden, without any imposition on the reuse of the code.
+ */
 
 /* ============================================================= */
 /*  COPYRIGHT (C) 1986 Gary S. Brown.  You may use this program, or       */
