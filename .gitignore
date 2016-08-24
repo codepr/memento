@@ -1,0 +1,15 @@
+*.d
+*.o
+*.ko
+*.obj
+*.elf
+*.ghc
+*.pch
+*.lib
+*.a
+*.la
+*.lo
+*.out
+*.hex
+*.dSYM/
+*.su

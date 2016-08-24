@@ -1,0 +1,33 @@
+
+SHIBUI
+=========================================
+
+Fairly basic hashmap implementation built on top of an async TCP server
+featuring epoll, a toy project just for learning purpose.
+
+The project is a minimal redis-like implementation with a text based protocol,
+currently supports basic operations:
+
+- SET key value
+- GET key
+- DEL key
+- INC key
+- DEC key
+- SUB key
+- PUB key value
+- COUNT
+- QUIT/EXIT
+
+All commands are case insensitive, so not strictly uppercase. Shibui can be used
+as a basic message broker through command PUB/SUB to pulish messages to multiple
+subscriber, using a key as a topic.
+Shibui server expect an optional arg to set an arbitrary host to listen on port
+6373, otherwise localhost will be automatically set.
+Actually there's no client console so it can be tested using a generic tcp
+client like telnet or netcat.
+
+* TODO
+
+- CLI to send commands and format output (easy)
+- Additional commands (easy)
+- Distribution system (fairly hard)
