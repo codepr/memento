@@ -50,6 +50,26 @@ static int find_prefix(any_t t1, any_t t2) {
     return MAP_MISSING;
 }
 
+/* callback function to match a given pattern by fuzzy searching it */
+static int find_fuzzy_pattern(any_t t1, any_t t2) {
+    char *key = (char *) t1;
+    char *item_key = (char *) t2;
+    int i = 0;
+    int k = 0;
+    int size = strlen(key);
+    int item_size = strlen(item_key);
+
+    while (i < size) {
+        if(k < item_size && i < size) {
+            if (item_key[k] == key[i]) {
+                k++;
+                i++;
+            } else k++;
+        } else return MAP_MISSING;
+    }
+    return MAP_OK;
+}
+
 static int create_and_bind(const char *host, char *port) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
@@ -247,12 +267,8 @@ void start_server(const char *host) {
                         send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
                         break;
                     default:
-                        /* send(events[1].data.fd, "\n", 1, 0); */
                         break;
                     }
-                    /* if (proc == 0) */
-                    /*     send(events[i].data.fd, "OK\n", 3, 0); */
-                    /* else if (proc != 1) send(events[i].data.fd, "ERROR\n", 6, 0); */
                     free(buf);
                 }
 
@@ -436,6 +452,14 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
             ret = m_prefscan(hashmap, find_prefix, key, sock_fd);
             if (ret == MAP_OK) return 1;
         } else return MAP_MISSING;
+    } else if (strcasecmp(command, "FUZZYSCAN") == 0) {
+        key = strtok(NULL, " ");
+        if (key) {
+            remove_newline(key);
+            trim(key);
+            ret = m_fuzzyscan(hashmap, find_fuzzy_pattern, key, sock_fd);
+            if (ret == MAP_OK) return 1;
+        }
     } else if (strcasecmp(command, "QUIT") == 0 || strcasecmp(command, "EXIT") == 0) {
         printf("Connection closed on descriptor %d\n", sock_fd);
         close(sock_fd);

@@ -18,6 +18,7 @@ currently supports basic operations:
 - COUNT
 - TAIL key number
 - PREFSCAN key_prefix
+- FUZZYSCAN pattern
 - QUIT/EXIT
 
 All commands are case insensitive, so not strictly uppercase. Shibui can be used
@@ -60,6 +61,12 @@ like a normal SUB command.
 
 - Added new command `PREFSCAN key_prefix`, find all values associated to keys that
   matches the prefix specified by key_prefix.
+
+2016-08-26
+
+- Added new command `FUZZYSCAN pattern`, perform a search through the keyspace
+  returning all values associated to keys that match a given pattern by fuzzy
+  search.
 
 * TODO
 =========================================
