@@ -407,6 +407,7 @@ int m_sub_from(map_t in, char *key, int fd, int index) {
     /* Not found */
     return MAP_MISSING;
 }
+
 /*
  * Iterate the function parameter over each element in the hashmap.  The
  * additional any_t argument is passed to the function as its first
@@ -473,9 +474,40 @@ int m_remove(map_t in, char* key) {
     return MAP_MISSING;
 }
 
+/*
+ * Iterate the function parameter over each element in the hashmap. The
+ * additional any_t argument is passed to the function as its first argument and
+ * the key of the current pair is the second, used to perform a prefscan operation.
+ * A prefscan operation return all keys that starts with a given prefix.
+ */
+int m_prefscan(map_t in, func f, any_t item, int fd) {
+    int i, flag = 0;
+
+    /* Cast the hashmap */
+    h_map* m = (h_map*) in;
+
+    /* On empty hashmap, return immediately */
+    if (m_length(m) <= 0)
+        return MAP_MISSING;
+
+    /* Linear probing */
+    for(i = 0; i < m->table_size; i++)
+        if (m->data[i].in_use != 0) {
+            kv_pair data = m->data[i];
+            int status = f(item, data.key);
+            if (status == MAP_OK) {
+                flag = 1;
+                send(fd, data.data, strlen(data.data), 0);
+            } else if (flag == 0) return status;
+        }
+
+    return MAP_OK;
+}
+
 /* callback function used with iterate to clean up the hashmap */
 static int destroy(any_t t1, any_t t2) {
     kv_pair *kv = (kv_pair *) t2;
+
     if (kv) {
         // free key field
         if (kv->key)

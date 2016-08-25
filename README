@@ -17,6 +17,7 @@ currently supports basic operations:
 - PUB key value
 - COUNT
 - TAIL key number
+- PREFSCAN key_prefix
 - QUIT/EXIT
 
 All commands are case insensitive, so not strictly uppercase. Shibui can be used
@@ -56,6 +57,9 @@ like a normal SUB command.
   the very first" and incresing number discard subsequents messages.
 
 - Fixed some bugs e refactored some code.
+
+- Added new command `PREFSCAN key_prefix`, find all values associated to keys that
+  matches the prefix specified by key_prefix.
 
 * TODO
 =========================================

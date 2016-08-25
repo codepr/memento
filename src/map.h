@@ -36,6 +36,7 @@ typedef struct _h_map {
 
 map_t m_create();
 int m_iterate(map_t, func, any_t);
+int m_prefscan(map_t, func, any_t, int);
 int m_put(map_t, char *, any_t);
 int m_get(map_t, char *, any_t *);
 int m_remove(map_t, char *);

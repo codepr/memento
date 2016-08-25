@@ -39,6 +39,17 @@ static void remove_newline(const char *buf) {
         *newline = '\0';
 }
 
+/* callback function to find all keys with a given prefix */
+static int find_prefix(any_t t1, any_t t2) {
+    char *key = (char *) t1;
+    char *item_key = (char *) t2;
+
+    if (strncmp(key, item_key, strlen(key)) == 0) {
+        return MAP_OK;
+    }
+    return MAP_MISSING;
+}
+
 static int create_and_bind(const char *host, char *port) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
@@ -220,7 +231,7 @@ void start_server(const char *host) {
                         break;
                     }
 
-                    printf("Message: %s\n", buf);
+                    printf("Command: %s\n", buf);
                     int proc = process_command(hashmap, buf, events[i].data.fd);
                     switch(proc) {
                     case MAP_OK:
@@ -416,6 +427,14 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
                 m_sub_from(hashmap, key, sock_fd, i);
                 ret = 1;
             } else return -1;
+        } else return MAP_MISSING;
+    } else if (strcasecmp(command, "PREFSCAN") == 0) {
+        key = strtok(NULL, " ");
+        if (key) {
+            remove_newline(key);
+            trim(key);
+            ret = m_prefscan(hashmap, find_prefix, key, sock_fd);
+            if (ret == MAP_OK) return 1;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "QUIT") == 0 || strcasecmp(command, "EXIT") == 0) {
         printf("Connection closed on descriptor %d\n", sock_fd);
