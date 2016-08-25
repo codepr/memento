@@ -1,6 +1,8 @@
 #ifndef MAP_H
 #define MAP_H
 
+#include "queue.h"
+
 #define MAP_MISSING -3
 #define MAP_FULL -2
 #define MAP_OMEM -1
@@ -21,6 +23,7 @@ typedef struct _kv_pair {
     any_t data;
     int *subscribers;
     int last_subscriber;
+    queue *data_history;
 } kv_pair;
 
 /* A hashmap has some maximum size and current size,
@@ -38,6 +41,7 @@ int m_get(map_t, char *, any_t *);
 int m_remove(map_t, char *);
 int m_get_one(map_t, any_t *, int);
 int m_sub(map_t, char *, int);
+int m_sub_from(map_t, char *, int, int);
 int m_pub(map_t, char *, any_t);
 void m_release(map_t);
 int m_length(map_t);

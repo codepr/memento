@@ -191,6 +191,14 @@ static int hashmap_hash(map_t in, char* key) {
     return MAP_FULL;
 }
 
+static int already_in(int *arr, int fd, int size) {
+    for(int i = 0; i < size; i++) {
+        if(arr[i] == fd)
+            return 1;
+    }
+    return 0;
+}
+
 /*
  * Doubles the size of the hashmap, and rehashes all the elements
  */
@@ -256,6 +264,7 @@ int m_put(map_t in, char* key, any_t value) {
         m->size++;
         m->data[index].last_subscriber = 0;
         m->data[index].subscribers = (int *) malloc(sizeof(int) * 64);
+        m->data[index].data_history = create_queue();
     }
 
     return MAP_OK;
@@ -283,8 +292,14 @@ int m_pub(map_t in, char* key, any_t value) {
     /* Set the data */
     m->data[index].data = value;
     m->data[index].key = key;
-    m->data[index].in_use = 1;
-    m->size++;
+    if (m->data[index].in_use == 0) {
+        m->data[index].in_use = 1;
+        m->size++;
+        m->data[index].last_subscriber = 0;
+        m->data[index].subscribers = (int *) malloc(sizeof(int) * 64);
+        m->data[index].data_history = create_queue();
+    }
+    enqueue(m->data[index].data_history, value);
     for(int i = 0; i < m->data[index].last_subscriber; i++) {
         send(m->data[index].subscribers[i], m->data[index].data, strlen((char *) m->data[index].data), 0);
     }
@@ -336,11 +351,52 @@ int m_sub(map_t in, char *key, int fd) {
     /* Linear probing, if necessary */
     for(i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
-        if (in_use == 1){
-            if (strcmp(m->data[curr].key, key) == 0){
+        if (in_use == 1) {
+            if (strcmp(m->data[curr].key, key) == 0) {
                 last = m->data[curr].last_subscriber;
-                m->data[curr].subscribers[last] = fd;
-                m->data[curr].last_subscriber++;
+                if(already_in(m->data[curr].subscribers, fd, last) == 0) {
+                    m->data[curr].subscribers[last] = fd;
+                    m->data[curr].last_subscriber++;
+                }
+                return MAP_OK;
+            }
+        }
+
+        curr = (curr + 1) % m->table_size;
+    }
+
+    /* Not found */
+    return MAP_MISSING;
+}
+
+int m_sub_from(map_t in, char *key, int fd, int index) {
+    int i, curr, last;
+    h_map *m;
+
+    m = (h_map *) in;
+
+    curr = hashmap_hash_int(m, key);
+    /* Linear probing, if necessary */
+    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+        int in_use = m->data[curr].in_use;
+        if (in_use == 1){
+            if (strcmp(m->data[curr].key, key) == 0) {
+                last = m->data[curr].last_subscriber;
+                if (already_in(m->data[curr].subscribers, fd, last) == 0) {
+                    m->data[curr].subscribers[last] = fd;
+                    m->data[curr].last_subscriber++;
+                }
+                if ((size_t) index < m->data[curr].data_history->last && index >= 0) {
+                    iterator it = m->data[curr].data_history->front;
+                    while(it) {
+                        if (index == 0) {
+                            int len = strlen((char *) it->data);
+                            send(fd, it->data, len, 0);
+                        }
+                        else index--;
+                        it = it->next;
+                    }
+                }
                 return MAP_OK;
             }
         }
@@ -367,10 +423,11 @@ int m_iterate(map_t in, func f, any_t item) {
         return MAP_MISSING;
 
     /* Linear probing */
-    for(i = 0; i< m->table_size; i++)
-        if(m->data[i].in_use != 0) {
-            any_t data = (any_t) (m->data[i].data);
-            int status = f(item, data);
+    for(i = 0; i < m->table_size; i++)
+        if (m->data[i].in_use != 0) {
+            /* any_t data = (any_t) (m->data[i].data); */
+            kv_pair data = m->data[i];
+            int status = f(item, &data);
             if (status != MAP_OK) {
                 return status;
             }
@@ -393,15 +450,16 @@ int m_remove(map_t in, char* key) {
     curr = hashmap_hash_int(m, key);
 
     /* Linear probing, if necessary */
-    for(i = 0; i<MAX_CHAIN_LENGTH; i++){
+    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
 
         int in_use = m->data[curr].in_use;
         if (in_use == 1){
             if (strcmp(m->data[curr].key,key)==0){
                 /* Blank out the fields */
                 m->data[curr].in_use = 0;
-                m->data[curr].data = NULL;
-                m->data[curr].key = NULL;
+                free(m->data[curr].subscribers);
+                release_queue(m->data[curr].data_history);
+                m->data[curr].last_subscriber = 0;
 
                 /* Reduce the size */
                 m->size--;
@@ -415,9 +473,30 @@ int m_remove(map_t in, char* key) {
     return MAP_MISSING;
 }
 
+/* callback function used with iterate to clean up the hashmap */
+static int destroy(any_t t1, any_t t2) {
+    kv_pair *kv = (kv_pair *) t2;
+    if (kv) {
+        // free key field
+        if (kv->key)
+            free(kv->key);
+        // free value field
+        if (kv->data)
+            free(kv->data);
+        // data history queue
+        if (kv->data_history)
+            release_queue(kv->data_history);
+        // free subscribers array
+        if (kv->subscribers)
+            free(kv->subscribers);
+    } else return MAP_MISSING;
+    return MAP_OK;
+}
+
 /* Deallocate the hashmap */
 void m_release(map_t in){
     h_map* m = (h_map*) in;
+    m_iterate(m, destroy, NULL);
     free(m->data);
     free(m);
 }

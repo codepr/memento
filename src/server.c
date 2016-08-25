@@ -36,7 +36,7 @@ static void remove_newline(const char *buf) {
         *newline = '\0';
     newline = strrchr(buf, '\r');
     if (newline)
-        *newline = '\r';
+        *newline = '\0';
 }
 
 static int create_and_bind(const char *host, char *port) {
@@ -200,7 +200,7 @@ void start_server(const char *host) {
                     ssize_t count;
                     /* char buf[MAX_DATA_SIZE]; */
                     char *buf = malloc(MAX_DATA_SIZE);
-
+                    bzero(buf, MAX_DATA_SIZE);
                     count = read(events[i].data.fd, buf, MAX_DATA_SIZE - 1);
                     if (count == -1) {
                         /* If errno == EAGAIN, that means we have read all
@@ -248,7 +248,6 @@ void start_server(const char *host) {
                 if (done) {
                     printf("Closed connection on descriptor %d\n",
                            events[i].data.fd);
-                    m_release(hashmap);
                     /* Closing the descriptor will make epoll remove it
                        from the set of descriptors which are monitored. */
                     close(events[i].data.fd);
@@ -257,6 +256,7 @@ void start_server(const char *host) {
         }
     }
 
+    m_release(hashmap);
     free(events);
     close(sfd);
 
@@ -301,10 +301,14 @@ static int to_int(char *p) {
     return len;
 }
 
+/*
+ * process incoming request from the file descriptor socket represented by
+ * sock_fd
+ */
 int process_command(h_map *hashmap, char *buffer, int sock_fd) {
-    char *command;
-    char *key;
-    void *value;
+    char *command = NULL;
+    char *key = NULL;
+    void *value = NULL;
     int ret = 0;
     command = strtok(buffer, " \r\n");
     // print nothing on an empty command
@@ -313,76 +317,106 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
     if (strcasecmp(command, "SET") == 0) {
         key = strtok(NULL, " ");
         value = key + strlen(key) + 1;
-        remove_newline(value);
-        char *key_holder = malloc(strlen(key));
-        char *value_holder = malloc(strlen((char *) value));
-        strcpy(key_holder, key);
-        strcpy(value_holder, value);
-        ret = m_put(hashmap, key_holder, value_holder);
+        if (key && value) {
+            remove_newline(value);
+            char *key_holder = malloc(strlen(key));
+            char *value_holder = malloc(strlen((char *) value));
+            strcpy(key_holder, key);
+            strcpy(value_holder, value);
+            ret = m_put(hashmap, key_holder, value_holder);
+        }
     } else if (strcasecmp(command, "GET") == 0) {
         key = strtok(NULL, " ");
-        remove_newline(key);
-        trim(key);
-        int get = m_get(hashmap, key, &value);
-        if (get == MAP_OK && value) {
-            send(sock_fd, value, strlen((char *) value), 0);
-            return 1;
+        if (key) {
+            remove_newline(key);
+            trim(key);
+
+            int get = m_get(hashmap, key, &value);
+            if (get == MAP_OK && value) {
+                send(sock_fd, value, strlen((char *) value), 0);
+                return 1;
+            } else ret = MAP_MISSING;
         } else ret = MAP_MISSING;
     } else if (strcasecmp(command, "DEL") == 0) {
         key = strtok(NULL, " ");
-        remove_newline(key);
-        trim(key);
-        ret = m_remove(hashmap, key);
+        if (key) {
+            remove_newline(key);
+            trim(key);
+            ret = m_remove(hashmap, key);
+        }
     } else if (strcasecmp(command, "SUB") == 0) {
         key = strtok(NULL, " ");
-        remove_newline(key);
-        trim(key);
-        ret = m_sub(hashmap, key, sock_fd);
+        if (key) {
+            remove_newline(key);
+            trim(key);
+            ret = m_sub(hashmap, key, sock_fd);
+        }
     } else if (strcasecmp(command, "PUB") == 0) {
         key = strtok(NULL, " ");
         value = key + strlen(key) + 1;
-        remove_newline(value);
-        char *key_holder = malloc(strlen(key));
-        char *value_holder = malloc(strlen((char *) value));
-        strcpy(key_holder, key);
-        strcpy(value_holder, value);
-        ret = m_pub(hashmap, key_holder, value_holder);
+        if (key && value) {
+            remove_newline(value);
+            char *key_holder = malloc(strlen(key));
+            char *value_holder = malloc(strlen((char *) value));
+            strcpy(key_holder, key);
+            strcpy(value_holder, value);
+            ret = m_pub(hashmap, key_holder, value_holder);
+        }
     } else if (strcasecmp(command, "INC") == 0) {
         key = strtok(NULL, " ");
-        remove_newline(key);
-        trim(key);
-        ret = m_get(hashmap, key, &value);
-        if (ret == MAP_OK && value) {
-            char *s = (char *) value;
-            if(is_number(s) == 1) {
-                int v = to_int(s);
-                v++;
-                sprintf(value, "%d", v);
-                ret = m_put(hashmap, key, value);
-            }
-            else return -1;
-        } else return ret;
+        if (key) {
+            remove_newline(key);
+            trim(key);
+            ret = m_get(hashmap, key, &value);
+            if (ret == MAP_OK && value) {
+                char *s = (char *) value;
+                if (is_number(s) == 1) {
+                    int v = to_int(s);
+                    v++;
+                    sprintf(value, "%d", v);
+                    ret = m_put(hashmap, key, value);
+                }
+                else return -1;
+            } else return ret;
+        } else return MAP_MISSING;
     } else if (strcasecmp(command, "DEC") == 0) {
         key = strtok(NULL, " ");
-        remove_newline(key);
-        trim(key);
-        ret = m_get(hashmap, key, &value);
-        if (ret == MAP_OK && value) {
-            char *s = (char *) value;
-            if(is_number(s) == 1) {
-                int v = to_int(s);
-                v--;
-                sprintf(value, "%d", v);
-                ret = m_put(hashmap, key, value);
-            }
-            else return -1;
-        } else return ret;
+        if (key) {
+            remove_newline(key);
+            trim(key);
+            ret = m_get(hashmap, key, &value);
+            if (ret == MAP_OK && value) {
+                char *s = (char *) value;
+                if(is_number(s) == 1) {
+                    int v = to_int(s);
+                    v--;
+                    sprintf(value, "%d", v);
+                    ret = m_put(hashmap, key, value);
+                }
+                else return -1;
+            } else return ret;
+        } else return MAP_MISSING;
     } else if (strcasecmp(command, "COUNT") == 0) {
         int len = m_length(hashmap);
         char c_len[5];
         sprintf(c_len, "%d", len);
         send(sock_fd, c_len, 5, 0);
         return 1;
+    } else if (strcasecmp(command, "TAIL") == 0) {
+        key = strtok(NULL, " ");
+        value = key + strlen(key) + 1;
+        if (key && value) {
+            remove_newline(value);
+            char *key_holder = malloc(strlen(key));
+            char *value_holder = malloc(strlen((char *) value));
+            strcpy(key_holder, key);
+            strcpy(value_holder, value);
+            if (is_number(value_holder)) {
+                int i = to_int(value_holder);
+                m_sub_from(hashmap, key, sock_fd, i);
+                ret = 1;
+            } else return -1;
+        } else return MAP_MISSING;
     } else if (strcasecmp(command, "QUIT") == 0 || strcasecmp(command, "EXIT") == 0) {
         printf("Connection closed on descriptor %d\n", sock_fd);
         close(sock_fd);

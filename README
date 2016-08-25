@@ -16,6 +16,7 @@ currently supports basic operations:
 - SUB key
 - PUB key value
 - COUNT
+- TAIL key number
 - QUIT/EXIT
 
 All commands are case insensitive, so not strictly uppercase. Shibui can be used
@@ -25,6 +26,36 @@ Shibui server expect an optional arg to set an arbitrary host to listen on port
 6373, otherwise localhost will be automatically set.
 Actually there's no client console so it can be tested using a generic tcp
 client like telnet or netcat.
+
+Out of the common commands like SET, GET or COUNT who everyone probably knows
+the behavior, TAIL key number is a command that allow a client to consume an
+arbitrary number of chronologically sorted messages published to a specific key,
+with number as the offset for the depletion. 0 means from the start of the
+publication, increasing number discard the same quantity of messages starting
+from the oldest going to younger. E.g:
+
+topic_key
+ - i am
+ - a stream
+ - of useless
+ - messages
+
+tail topic_key 0 -> i ama streamof uselessmessages
+tail topic_key 2 -> of uselessmessages
+
+All subsequent messages published to the key topic will be normally dispatched
+like a normal SUB command.
+
+* CHANGELOG
+=========================================
+
+2016-08-25
+
+- Added new command `TAIL key number`, consume all values published to a key and
+  subscribe to it. Number is the offset of the depletion, with 0 meaning "from
+  the very first" and incresing number discard subsequents messages.
+
+- Fixed some bugs e refactored some code.
 
 * TODO
 
