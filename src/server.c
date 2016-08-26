@@ -378,6 +378,13 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
             trim(key);
             ret = m_sub(hashmap, key, sock_fd);
         }
+    } else if (strcasecmp(command, "UNSUB") == 0) {
+        key = strtok(NULL, " ");
+        if (key) {
+            remove_newline(key);
+            trim(key);
+            ret = m_unsub(hashmap, key, sock_fd);
+        }
     } else if (strcasecmp(command, "PUB") == 0) {
         key = strtok(NULL, " ");
         value = key + strlen(key) + 1;
@@ -460,6 +467,10 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
             ret = m_fuzzyscan(hashmap, find_fuzzy_pattern, key, sock_fd);
             if (ret == MAP_OK) return 1;
         }
+    } else if (strcasecmp(command, "FLUSH") == 0) {
+        m_release(hashmap);
+        hashmap = m_create();
+        ret = MAP_OK;
     } else if (strcasecmp(command, "QUIT") == 0 || strcasecmp(command, "EXIT") == 0) {
         printf("Connection closed on descriptor %d\n", sock_fd);
         close(sock_fd);

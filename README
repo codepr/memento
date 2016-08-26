@@ -14,11 +14,13 @@ currently supports basic operations:
 - INC key
 - DEC key
 - SUB key
+- UNSUB key
 - PUB key value
 - COUNT
 - TAIL key number
 - PREFSCAN key_prefix
 - FUZZYSCAN pattern
+- FLUSH
 - QUIT/EXIT
 
 All commands are case insensitive, so not strictly uppercase. Shibui can be used
@@ -48,6 +50,12 @@ tail topic_key 2 -> of uselessmessages
 All subsequent messages published to the key topic will be normally dispatched
 like a normal SUB command.
 
+* BUILD
+
+To build the source just run make. A shibui executable will be generated that
+can be started to listen on localhost:6737, ready to receive commands from any
+TCP client.
+
 * CHANGELOG
 =========================================
 
@@ -67,6 +75,13 @@ like a normal SUB command.
 - Added new command `FUZZYSCAN pattern`, perform a search through the keyspace
   returning all values associated to keys that match a given pattern by fuzzy
   search.
+
+- Added new command `UNSUB key` to stop receiving feeds from the key.
+
+- Added new command `FLUSH' to delete all keys in the keyspace
+
+- Fixed rehash_map code in order to update data history and the subscribers
+  array as well when resizing the map.
 
 * TODO
 =========================================

@@ -9,6 +9,7 @@
 #define MAP_OK 0
 #define INITIAL_SIZE (256)
 #define MAX_CHAIN_LENGTH (8)
+#define SUBSCRIBER_SIZE (64)
 
 typedef void *any_t;
 
@@ -44,6 +45,7 @@ int m_remove(map_t, char *);
 int m_get_one(map_t, any_t *, int);
 int m_sub(map_t, char *, int);
 int m_sub_from(map_t, char *, int, int);
+int m_unsub(map_t, char *, int);
 int m_pub(map_t, char *, any_t);
 void m_release(map_t);
 int m_length(map_t);

@@ -191,25 +191,57 @@ static int hashmap_hash(map_t in, char* key) {
     return MAP_FULL;
 }
 
+/* Auxiliary function to determine wether a descriptor is already inside a
+ * subscriber array, return the index position if it is contained, -1 otherwise
+ */
 static int already_in(int *arr, int fd, int size) {
     for(int i = 0; i < size; i++) {
         if(arr[i] == fd)
-            return 1;
+            return i;
     }
-    return 0;
+    return -1;
+}
+
+static int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
+    int i, curr;
+    h_map* m;
+
+    /* Cast the hashmap */
+    m = (h_map *) in;
+
+    /* Find data location */
+    curr = hashmap_hash_int(m, key);
+
+    /* Linear probing, if necessary */
+    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+        int in_use = m->data[curr].in_use;
+        if (in_use == 1){
+            if (strcmp(m->data[curr].key, key) == 0){
+                *arg = m->data[curr];
+                return MAP_OK;
+            }
+        }
+
+        curr = (curr + 1) % m->table_size;
+    }
+
+    arg = NULL;
+
+    /* Not found */
+    return MAP_MISSING;
 }
 
 /*
  * Doubles the size of the hashmap, and rehashes all the elements
  */
-int hashmap_rehash(map_t in) {
+static int hashmap_rehash(map_t in) {
     int i, old_size;
     kv_pair* curr;
 
     /* Setup the new elements */
     h_map *m = (h_map *) in;
     kv_pair* temp = (kv_pair *) calloc(2 * m->table_size, sizeof(kv_pair));
-    if(!temp) return MAP_OMEM;
+    if (!temp) return MAP_OMEM;
 
     /* Update the array */
     curr = m->data;
@@ -221,7 +253,7 @@ int hashmap_rehash(map_t in) {
     m->size = 0;
 
     /* Rehash the elements */
-    for(i = 0; i < old_size; i++){
+    for(i = 0; i < old_size; i++) {
         int status;
 
         if (curr[i].in_use == 0)
@@ -230,6 +262,20 @@ int hashmap_rehash(map_t in) {
         status = m_put(m, curr[i].key, curr[i].data);
         if (status != MAP_OK)
             return status;
+        /* update subscribers */
+        if (curr[i].last_subscriber > 0) {
+            kv_pair *p = (kv_pair *) malloc(sizeof(kv_pair));
+            m_get_kv_pair(m, curr[i].key, p);
+            for (int k = 0; k < curr[i].last_subscriber; k++) {
+                m_sub(m, curr[i].key, curr[i].subscribers[k]);
+            }
+        }
+        /* update data history as well */
+        iterator it = curr[i].data_history->front;
+        while(it) {
+            m_pub(m, curr[i].key, it->data);
+            it = it->next;
+        }
     }
 
     free(curr);
@@ -263,7 +309,7 @@ int m_put(map_t in, char* key, any_t value) {
         m->data[index].in_use = 1;
         m->size++;
         m->data[index].last_subscriber = 0;
-        m->data[index].subscribers = (int *) malloc(sizeof(int) * 64);
+        m->data[index].subscribers = (int *) malloc(sizeof(int) * SUBSCRIBER_SIZE);
         m->data[index].data_history = create_queue();
     }
 
@@ -338,7 +384,8 @@ int m_get(map_t in, char *key, any_t *arg) {
     return MAP_MISSING;
 }
 
-/* subscribe to a key in the keyspace, adding a file descriptor representing a
+/*
+ * subscribe to a key in the keyspace, adding a file descriptor representing a
  * socket to the array of subscribers of the pair identified by key.
  */
 int m_sub(map_t in, char *key, int fd) {
@@ -354,7 +401,7 @@ int m_sub(map_t in, char *key, int fd) {
         if (in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
                 last = m->data[curr].last_subscriber;
-                if(already_in(m->data[curr].subscribers, fd, last) == 0) {
+                if(already_in(m->data[curr].subscribers, fd, last) == -1) {
                     m->data[curr].subscribers[last] = fd;
                     m->data[curr].last_subscriber++;
                 }
@@ -369,6 +416,45 @@ int m_sub(map_t in, char *key, int fd) {
     return MAP_MISSING;
 }
 
+/*
+ * unsubscribe from a key removin the file descriptor representing the socket
+ * from the array of subscribers of the pair identified by keyspace
+ */
+int m_unsub(map_t in, char *key, int fd) {
+    int i, curr, last;
+    h_map *m;
+
+    m = (h_map *) in;
+
+    curr = hashmap_hash_int(m, key);
+    /* Linear probing, if necessary */
+    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+        int in_use = m->data[curr].in_use;
+        if (in_use == 1) {
+            if (strcmp(m->data[curr].key, key) == 0) {
+                last = m->data[curr].last_subscriber;
+                int index = already_in(m->data[curr].subscribers, fd, last);
+                if(index != -1) {
+                    // ordering doesn't matter
+                    m->data[curr].subscribers[index] = m->data[curr].subscribers[last - 1];
+                    m->data[curr].last_subscriber--;
+                }
+                return MAP_OK;
+            }
+        }
+
+        curr = (curr + 1) % m->table_size;
+    }
+
+    /* Not found */
+    return MAP_MISSING;
+}
+
+/*
+ * subscribe to a key in the keyspace, and consume all values previously
+ * published to that key according to an offset giving indication on where to
+ * start read the depletion.
+ */
 int m_sub_from(map_t in, char *key, int fd, int index) {
     int i, curr, last;
     h_map *m;
@@ -382,7 +468,7 @@ int m_sub_from(map_t in, char *key, int fd, int index) {
         if (in_use == 1){
             if (strcmp(m->data[curr].key, key) == 0) {
                 last = m->data[curr].last_subscriber;
-                if (already_in(m->data[curr].subscribers, fd, last) == 0) {
+                if (already_in(m->data[curr].subscribers, fd, last) == -1) {
                     m->data[curr].subscribers[last] = fd;
                     m->data[curr].last_subscriber++;
                 }
