@@ -6,8 +6,9 @@
 #define MAX_EVENTS 100
 
 #include "map.h"
+#include "partition.h"
 
 void start_server(const char *);
-int process_command(h_map *, char *, int);
+int process_command(partition **, char *, int);
 
 #endif

@@ -1,23 +1,22 @@
 #include <string.h>
+#include "util.h"
 #include "partition.h"
 
 partition *create_partition() {
     partition *p = (partition *) malloc(sizeof(partition));
-    p->in_use = 0;
     p->map = m_create();
     return p;
 }
 
-
+/* deallocate map inside the partition */
 int partition_release(partition *p) {
-    if (p) {
-        p->in_use = 0;
+    if (p)
         m_release(p->map);
-    }
     free(p);
     return 0;
 }
 
+/* retrieve a valid index to distribute key inside a partitions array */
 int partition_hash(char *keystring) {
 
     unsigned long key = crc32((unsigned char *) (keystring), strlen(keystring));

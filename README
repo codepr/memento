@@ -52,6 +52,10 @@ tail topic_key 2 -> of uselessmessages
 All subsequent messages published to the key topic will be normally dispatched
 like a normal SUB command.
 
+Actually the keyspace is distributed across 1024 partitions based on consistent
+hashing of the keys, this way should be simplier to eventually distribute data
+across multiple nodes.
+
 * BUILD
 
 To build the source just run make. A shibui executable will be generated that
@@ -87,6 +91,9 @@ TCP client.
 
 - Added new commands `KEYS` and `VALUES` respectively return all keys and all
   values stored in the hashmap
+
+- Added partitioning to keyspace distribution, this should simplify an aventual
+  distribution across multiple nodes.
 
 * TODO
 =========================================

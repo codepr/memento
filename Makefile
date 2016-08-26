@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS = -Wall -lrt
 SRC = src
-OBJS = $(SRC)/map.c $(SRC)/server.c $(SRC)/queue.c
+OBJS = $(SRC)/map.c $(SRC)/server.c $(SRC)/queue.c $(SRC)/partition.c $(SRC)/util.c
 BIN = main
 BIN_NAME = shibui
 

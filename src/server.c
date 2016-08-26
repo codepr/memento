@@ -1,5 +1,3 @@
-#include "server.h"
-#include "partition.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,6 +13,8 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <aio.h>
+#include "server.h"
+#include "partition.h"
 
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
@@ -86,27 +86,27 @@ static int print_values(any_t t1, any_t t2) {
     return MAP_OK;
 }
 
-static int async_write(char *str) {
-    int file = open("log", O_CREAT | O_RDWR | O_EXCL, S_IRUSR | S_IWUSR);
-    struct aiocb cb;
+/* static int async_write(char *str) { */
+/*     int file = open("log", O_CREAT | O_RDWR | O_EXCL, S_IRUSR | S_IWUSR); */
+/*     struct aiocb cb; */
 
-    char *buf = (char *) malloc(strlen(str));
-    strcpy(buf, str);
+/*     char *buf = (char *) malloc(strlen(str)); */
+/*     strcpy(buf, str); */
 
-    memset(&cb, 0, sizeof(cb));
-    cb.aio_nbytes = strlen(str);
-    cb.aio_fildes = file;
-    cb.aio_buf = buf;
-    if (aio_write(&cb) == -1) {
-        perror("error");
-        return -1;
-    }
+/*     memset(&cb, 0, sizeof(cb)); */
+/*     cb.aio_nbytes = strlen(str); */
+/*     cb.aio_fildes = file; */
+/*     cb.aio_buf = buf; */
+/*     if (aio_write(&cb) == -1) { */
+/*         perror("error"); */
+/*         return -1; */
+/*     } */
 
-    while (aio_error(&cb) == EINPROGRESS)
-        close(file);
+/*     while (aio_error(&cb) == EINPROGRESS) */
+/*         close(file); */
 
-    return 0;
-}
+/*     return 0; */
+/* } */
 
 // auxiliary method for creating epoll server
 static int create_and_bind(const char *host, char *port) {
@@ -115,8 +115,8 @@ static int create_and_bind(const char *host, char *port) {
     int s, sfd;
 
     memset (&hints, 0, sizeof (struct addrinfo));
-    hints.ai_family = AF_UNSPEC;     /* Return IPv4 and IPv6 choices */
-    hints.ai_socktype = SOCK_STREAM; /* We want a TCP socket */
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;     /* All interfaces */
 
     s = getaddrinfo(host, port, &hints, &result);
@@ -140,7 +140,6 @@ static int create_and_bind(const char *host, char *port) {
     }
 
     if (rp == NULL) {
-        /* fprintf(stderr, "Could not bind\n"); */
         perror("Could not bind");
         return -1;
     }
@@ -152,8 +151,10 @@ static int create_and_bind(const char *host, char *port) {
 
 // start server instance, by setting hostname
 void start_server(const char *host) {
-    partition *buckets = (partition *) malloc(sizeof(partition));
-    h_map *hashmap = m_create();
+    partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
+    for (int i = 0; i < PARTITION_NUMBER; i++)
+        buckets[i] = create_partition();
+    /* h_map *hashmap = m_create(); */
     int efd, sfd, s;
     struct epoll_event event, *events;
 
@@ -191,7 +192,8 @@ void start_server(const char *host) {
     if (host == NULL)
         printf("Server listening on 127.0.0.1:%s\n", PORT);
     else printf("Server listening on %s:%s\n", host, PORT);
-    /* The event loop */
+
+    /* starti the event loop */
     while (1) {
         int n, i;
 
@@ -200,17 +202,14 @@ void start_server(const char *host) {
             if ((events[i].events & EPOLLERR) ||
                 (events[i].events & EPOLLHUP) ||
                 (!(events[i].events & EPOLLIN))) {
-                /* An error has occured on this fd, or the socket is not
-                   ready for reading (why were we notified then?) */
-                /* fprintf(stderr, "epoll error\n"); */
                 perror("epoll error");
                 close(events[i].data.fd);
                 continue;
             }
 
             else if (sfd == events[i].data.fd) {
-                /* We have a notification on the listening socket, which
-                   means one or more incoming connections. */
+                /* We have a notification on the listening socket, which means
+                   one or more incoming connections. */
                 while (1) {
                     struct sockaddr in_addr;
                     socklen_t in_len;
@@ -222,8 +221,7 @@ void start_server(const char *host) {
                     if (infd == -1) {
                         if ((errno == EAGAIN) ||
                             (errno == EWOULDBLOCK)) {
-                            /* We have processed all incoming
-                               connections. */
+                            /* processed all incoming connections. */
                             break;
                         }
                         else {
@@ -260,11 +258,7 @@ void start_server(const char *host) {
                 continue;
             }
             else {
-                /* We have data on the fd waiting to be read. Read and
-                   display it. We must read whatever data is available
-                   completely, as we are running in edge-triggered mode
-                   and won't get a notification again for the same
-                   data. */
+                /* We have data on the fd waiting to be read */
                 int done = 0;
 
                 while (1) {
@@ -273,8 +267,8 @@ void start_server(const char *host) {
                     bzero(buf, MAX_DATA_SIZE);
                     count = read(events[i].data.fd, buf, MAX_DATA_SIZE - 1);
                     if (count == -1) {
-                        /* If errno == EAGAIN, that means we have read all
-                           data. So go back to the main loop. */
+                        /* If errno == EAGAIN, that means we have read all data.
+                           So go back to the main loop. */
                         if (errno != EAGAIN) {
                             perror("read");
                             done = 1;
@@ -283,15 +277,14 @@ void start_server(const char *host) {
                         break;
                     }
                     else if (count == 0) {
-                        /* End of file. The remote has closed the
-                           connection. */
+                        /* End of file. The remote has closed the connection. */
                         done = 1;
                         free(buf);
                         break;
                     }
 
                     printf("Command: %s\n", buf);
-                    int proc = process_command(hashmap, buf, events[i].data.fd);
+                    int proc = process_command(buckets, buf, events[i].data.fd);
                     switch(proc) {
                     case MAP_OK:
                         send(events[i].data.fd, "OK\n", 3, 0);
@@ -314,15 +307,18 @@ void start_server(const char *host) {
                 if (done) {
                     printf("Closed connection on descriptor %d\n",
                            events[i].data.fd);
-                    /* Closing the descriptor will make epoll remove it
-                       from the set of descriptors which are monitored. */
+                    /* Closing the descriptor will make epoll remove it from the
+                       set of descriptors which are monitored. */
                     close(events[i].data.fd);
                 }
             }
         }
     }
 
-    m_release(hashmap);
+    /* release all partitions */
+    /* m_release(hashmap); */
+    for (int i = 0; i < PARTITION_NUMBER; i++)
+        partition_release(buckets[i]);
     free(events);
     close(sfd);
 
@@ -351,13 +347,14 @@ static void trim(char *str) {
     str[i - begin] = '\0'; // Null terminate string.
 }
 
+/* auxiliary function to check wether a string is an integer */
 static int is_number(char *s) {
     while(*s) {
         if (isdigit(*s++) == 0) return 0;
     }
     return 1;
 }
-
+/* auxiliary function to convert the integer content of a string into an int */
 static int to_int(char *p) {
     int len = 0;
     while(isdigit(*p)) {
@@ -371,7 +368,7 @@ static int to_int(char *p) {
  * process incoming request from the file descriptor socket represented by
  * sock_fd
  */
-int process_command(h_map *hashmap, char *buffer, int sock_fd) {
+int process_command(partition **buckets, char *buffer, int sock_fd) {
     char *command = NULL;
     char *key = NULL;
     void *value = NULL;
@@ -390,15 +387,16 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
             char *value_holder = malloc(strlen((char *) value));
             strcpy(key_holder, key);
             strcpy(value_holder, value);
-            ret = m_put(hashmap, key_holder, value_holder);
+            int p_index = partition_hash(key_holder);
+            ret = m_put(buckets[p_index]->map, key_holder, value_holder);
         }
     } else if (strcasecmp(command, "GET") == 0) {
         key = strtok(NULL, " ");
         if (key) {
             remove_newline(key);
             trim(key);
-
-            int get = m_get(hashmap, key, &value);
+            int p_index = partition_hash(key);
+            int get = m_get(buckets[p_index]->map, key, &value);
             if (get == MAP_OK && value) {
                 send(sock_fd, value, strlen((char *) value), 0);
                 return 1;
@@ -409,21 +407,24 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
         if (key) {
             remove_newline(key);
             trim(key);
-            ret = m_remove(hashmap, key);
+            int p_index = partition_hash(key);
+            ret = m_remove(buckets[p_index]->map, key);
         }
     } else if (strcasecmp(command, "SUB") == 0) {
         key = strtok(NULL, " ");
         if (key) {
             remove_newline(key);
             trim(key);
-            ret = m_sub(hashmap, key, sock_fd);
+            int p_index = partition_hash(key);
+            ret = m_sub(buckets[p_index]->map, key, sock_fd);
         }
     } else if (strcasecmp(command, "UNSUB") == 0) {
         key = strtok(NULL, " ");
         if (key) {
             remove_newline(key);
             trim(key);
-            ret = m_unsub(hashmap, key, sock_fd);
+            int p_index = partition_hash(key);
+            ret = m_unsub(buckets[p_index]->map, key, sock_fd);
         }
     } else if (strcasecmp(command, "PUB") == 0) {
         key = strtok(NULL, " ");
@@ -434,21 +435,23 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
             char *value_holder = malloc(strlen((char *) value));
             strcpy(key_holder, key);
             strcpy(value_holder, value);
-            ret = m_pub(hashmap, key_holder, value_holder);
+            int p_index = partition_hash(key_holder);
+            ret = m_pub(buckets[p_index]->map, key_holder, value_holder);
         }
     } else if (strcasecmp(command, "INC") == 0) {
         key = strtok(NULL, " ");
         if (key) {
             remove_newline(key);
             trim(key);
-            ret = m_get(hashmap, key, &value);
+            int p_index = partition_hash(key);
+            ret = m_get(buckets[p_index]->map, key, &value);
             if (ret == MAP_OK && value) {
                 char *s = (char *) value;
                 if (is_number(s) == 1) {
                     int v = to_int(s);
                     v++;
                     sprintf(value, "%d", v);
-                    ret = m_put(hashmap, key, value);
+                    ret = m_put(buckets[p_index]->map, key, value);
                 }
                 else return -1;
             } else return ret;
@@ -458,29 +461,36 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
         if (key) {
             remove_newline(key);
             trim(key);
-            ret = m_get(hashmap, key, &value);
+            int p_index = partition_hash(key);
+            ret = m_get(buckets[p_index]->map, key, &value);
             if (ret == MAP_OK && value) {
                 char *s = (char *) value;
                 if(is_number(s) == 1) {
                     int v = to_int(s);
                     v--;
                     sprintf(value, "%d", v);
-                    ret = m_put(hashmap, key, value);
+                    ret = m_put(buckets[p_index]->map, key, value);
                 }
                 else return -1;
             } else return ret;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "COUNT") == 0) {
-        int len = m_length(hashmap);
-        char c_len[5];
+        int len = 0;
+        for (int i = 0; i < PARTITION_NUMBER; i++)
+            len += m_length(buckets[i]);
+        char c_len[16];
         sprintf(c_len, "%d", len);
-        send(sock_fd, c_len, 5, 0);
+        send(sock_fd, c_len, 16, 0);
         return 1;
     } else if (strcasecmp(command, "KEYS") == 0) {
-        m_iterate(hashmap, print_keys, &sock_fd);
+        for (int i = 0; i < PARTITION_NUMBER; i++)
+            if (buckets[i]->map->size > 0)
+                m_iterate(buckets[i]->map, print_keys, &sock_fd);
         ret = 1;
     } else if (strcasecmp(command, "VALUES") == 0) {
-        m_prefscan(hashmap, print_values, NULL, sock_fd);
+        for (int i = 0; i < PARTITION_NUMBER; i++)
+            if (buckets[i]->map->size > 0)
+                m_prefscan(buckets[i]->map, print_values, NULL, sock_fd);
         ret = 1;
     } else if (strcasecmp(command, "TAIL") == 0) {
         key = strtok(NULL, " ");
@@ -493,7 +503,8 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
             strcpy(value_holder, value);
             if (is_number(value_holder)) {
                 int i = to_int(value_holder);
-                m_sub_from(hashmap, key, sock_fd, i);
+                int p_index = partition_hash(key_holder);
+                m_sub_from(buckets[p_index]->map, key, sock_fd, i);
                 ret = 1;
             } else return -1;
         } else return MAP_MISSING;
@@ -502,7 +513,8 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
         if (key) {
             remove_newline(key);
             trim(key);
-            ret = m_prefscan(hashmap, find_prefix, key, sock_fd);
+            int p_index = partition_hash(key);
+            ret = m_prefscan(buckets[p_index], find_prefix, key, sock_fd);
             if (ret == MAP_OK) return 1;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "FUZZYSCAN") == 0) {
@@ -510,12 +522,15 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
         if (key) {
             remove_newline(key);
             trim(key);
-            ret = m_fuzzyscan(hashmap, find_fuzzy_pattern, key, sock_fd);
+            int p_index = partition_hash(key);
+            ret = m_fuzzyscan(buckets[p_index]->map, find_fuzzy_pattern, key, sock_fd);
             if (ret == MAP_OK) return 1;
         }
     } else if (strcasecmp(command, "FLUSH") == 0) {
-        m_release(hashmap);
-        hashmap = m_create();
+        for (int i = 0; i < PARTITION_NUMBER; i++) {
+            partition_release(buckets[i]);
+            buckets[i] = create_partition();
+        }
         ret = MAP_OK;
     } else if (strcasecmp(command, "QUIT") == 0 || strcasecmp(command, "EXIT") == 0) {
         printf("Connection closed on descriptor %d\n", sock_fd);
