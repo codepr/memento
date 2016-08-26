@@ -27,8 +27,8 @@ typedef struct _kv_pair {
     queue *data_history;
 } kv_pair;
 
-/* A hashmap has some maximum size and current size,
- * as well as the data to hold. */
+/* A hashmap has some maximum size and current size, as well as the data to
+ * hold. */
 typedef struct _h_map {
     int table_size;
     int size;

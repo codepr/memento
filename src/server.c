@@ -83,20 +83,32 @@ static int print_keys(any_t t1, any_t t2) {
 
 /* callback function to print all values inside the hashmap */
 static int print_values(any_t t1, any_t t2) {
+    kv_pair *kv = (kv_pair *) t2;
+    int *fd = (int *) t1;
+
+    send(*fd, kv->data, strlen(kv->data), 0);
     return MAP_OK;
 }
 
-/* static int async_write(char *str) { */
-/*     int file = open("log", O_CREAT | O_RDWR | O_EXCL, S_IRUSR | S_IWUSR); */
+/* static int async_write(char *str)  { */
+/*     char log[3] = "log"; */
+/*     int file = open(log, O_RDWR|O_APPEND); */
+/*     if (file == -1) { */
+/*         perror("log"); */
+/*         exit(1); */
+/*     } */
+/*     /\* unlink(log); *\/ */
+
 /*     struct aiocb cb; */
 
 /*     char *buf = (char *) malloc(strlen(str)); */
 /*     strcpy(buf, str); */
 
-/*     memset(&cb, 0, sizeof(cb)); */
+/*     memset(&cb, 0, sizeof(struct aiocb)); */
 /*     cb.aio_nbytes = strlen(str); */
 /*     cb.aio_fildes = file; */
 /*     cb.aio_buf = buf; */
+/*     cb.aio_offset = 0; */
 /*     if (aio_write(&cb) == -1) { */
 /*         perror("error"); */
 /*         return -1; */
@@ -354,7 +366,7 @@ static int is_number(char *s) {
     }
     return 1;
 }
-/* auxiliary function to convert the integer content of a string into an int */
+/* auxiliary function to convert integer contained inside string into int */
 static int to_int(char *p) {
     int len = 0;
     while(isdigit(*p)) {
@@ -366,7 +378,9 @@ static int to_int(char *p) {
 
 /*
  * process incoming request from the file descriptor socket represented by
- * sock_fd
+ * sock_fd, buckets is an array of partition, every partition store an instance
+ * of hashmap, keys are distributed through consistent hashing calculated with
+ * crc32 % PARTITION_NUMBER
  */
 int process_command(partition **buckets, char *buffer, int sock_fd) {
     char *command = NULL;
@@ -490,7 +504,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
     } else if (strcasecmp(command, "VALUES") == 0) {
         for (int i = 0; i < PARTITION_NUMBER; i++)
             if (buckets[i]->map->size > 0)
-                m_prefscan(buckets[i]->map, print_values, NULL, sock_fd);
+                m_iterate(buckets[i]->map, print_values, &sock_fd);
         ret = 1;
     } else if (strcasecmp(command, "TAIL") == 0) {
         key = strtok(NULL, " ");
@@ -527,6 +541,8 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             if (ret == MAP_OK) return 1;
         }
     } else if (strcasecmp(command, "FLUSH") == 0) {
+        /* m_release(hashmap); */
+        /* hashmap = m_create(); */
         for (int i = 0; i < PARTITION_NUMBER; i++) {
             partition_release(buckets[i]);
             buckets[i] = create_partition();
