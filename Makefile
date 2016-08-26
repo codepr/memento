@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS = -Wall
+CFLAGS = -Wall -lrt
 SRC = src
 OBJS = $(SRC)/map.c $(SRC)/server.c $(SRC)/queue.c
 BIN = main

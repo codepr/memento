@@ -13,6 +13,7 @@
 #include <sys/epoll.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <aio.h>
 
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
@@ -70,6 +71,43 @@ static int find_fuzzy_pattern(any_t t1, any_t t2) {
     return MAP_OK;
 }
 
+/* callback function to print all keys inside the hashmap */
+static int print_keys(any_t t1, any_t t2) {
+    kv_pair *kv = (kv_pair *) t2;
+    int *fd = (int *) t1;
+
+    send(*fd, kv->key, strlen(kv->key), 0);
+    return MAP_OK;
+}
+
+/* callback function to print all values inside the hashmap */
+static int print_values(any_t t1, any_t t2) {
+    return MAP_OK;
+}
+
+static int async_write(char *str) {
+    int file = open("log", O_CREAT | O_RDWR | O_EXCL, S_IRUSR | S_IWUSR);
+    struct aiocb cb;
+
+    char *buf = (char *) malloc(strlen(str));
+    strcpy(buf, str);
+
+    memset(&cb, 0, sizeof(cb));
+    cb.aio_nbytes = strlen(str);
+    cb.aio_fildes = file;
+    cb.aio_buf = buf;
+    if (aio_write(&cb) == -1) {
+        perror("error");
+        return -1;
+    }
+
+    while (aio_error(&cb) == EINPROGRESS)
+        close(file);
+
+    return 0;
+}
+
+// auxiliary method for creating epoll server
 static int create_and_bind(const char *host, char *port) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
@@ -229,7 +267,6 @@ void start_server(const char *host) {
 
                 while (1) {
                     ssize_t count;
-                    /* char buf[MAX_DATA_SIZE]; */
                     char *buf = malloc(MAX_DATA_SIZE);
                     bzero(buf, MAX_DATA_SIZE);
                     count = read(events[i].data.fd, buf, MAX_DATA_SIZE - 1);
@@ -339,6 +376,7 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
     int ret = 0;
     command = strtok(buffer, " \r\n");
     // print nothing on an empty command
+    /* async_write(command); */
     if (!command)
         return 1;
     if (strcasecmp(command, "SET") == 0) {
@@ -436,6 +474,12 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
         sprintf(c_len, "%d", len);
         send(sock_fd, c_len, 5, 0);
         return 1;
+    } else if (strcasecmp(command, "KEYS") == 0) {
+        m_iterate(hashmap, print_keys, &sock_fd);
+        ret = 1;
+    } else if (strcasecmp(command, "VALUES") == 0) {
+        m_prefscan(hashmap, print_values, NULL, sock_fd);
+        ret = 1;
     } else if (strcasecmp(command, "TAIL") == 0) {
         key = strtok(NULL, " ");
         value = key + strlen(key) + 1;

@@ -563,8 +563,9 @@ int m_remove(map_t in, char* key) {
 /*
  * Iterate the function parameter over each element in the hashmap. The
  * additional any_t argument is passed to the function as its first argument and
- * the key of the current pair is the second, used to perform a prefscan operation.
- * A prefscan operation return all keys that starts with a given prefix.
+ * the key of the current pair is the second, used to perform a prefscan
+ * operation. A prefscan operation return all keys that starts with a given
+ * prefix.
  */
 int m_prefscan(map_t in, func f, any_t item, int fd) {
     int i, flag = 0;
@@ -593,8 +594,9 @@ int m_prefscan(map_t in, func f, any_t item, int fd) {
 /*
  * Iterate the function parameter over each element in the hashmap. The
  * additional any_t argument is passed to the function as its first argument and
- * the key of the current pair is the second, used to perform a fuzzyscan operation.
- * A fuzzyscan operation return all keys containing a pattern by fuzzy search.
+ * the key of the current pair is the second, used to perform a fuzzyscan
+ * operation. A fuzzyscan operation return all keys containing a pattern by
+ * fuzzy search.
  */
 int m_fuzzyscan(map_t in, func f, any_t item, int fd) {
     int i, status, flag = 0;
