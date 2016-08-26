@@ -172,17 +172,17 @@ static int hashmap_hash(map_t in, char* key) {
     h_map* m = (h_map *) in;
 
     /* If full, return immediately */
-    if(m->size >= (m->table_size/2)) return MAP_FULL;
+    if (m->size >= (m->table_size / 2)) return MAP_FULL;
 
     /* Find the best index */
     curr = hashmap_hash_int(m, key);
 
     /* Linear probing */
     for(i = 0; i< MAX_CHAIN_LENGTH; i++){
-        if(m->data[curr].in_use == 0)
+        if (m->data[curr].in_use == 0)
             return curr;
 
-        if(m->data[curr].in_use == 1 && (strcmp(m->data[curr].key, key) == 0))
+        if (m->data[curr].in_use == 1 && (strcmp(m->data[curr].key, key) == 0))
             return curr;
 
         curr = (curr + 1) % m->table_size;
@@ -196,7 +196,7 @@ static int hashmap_hash(map_t in, char* key) {
  */
 static int already_in(int *arr, int fd, int size) {
     for(int i = 0; i < size; i++) {
-        if(arr[i] == fd)
+        if (arr[i] == fd)
             return i;
     }
     return -1;
@@ -215,7 +215,7 @@ static int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
     /* Linear probing, if necessary */
     for(i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
-        if (in_use == 1){
+        if (in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0){
                 *arg = m->data[curr];
                 return MAP_OK;

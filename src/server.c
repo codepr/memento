@@ -1,4 +1,5 @@
 #include "server.h"
+#include "partition.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -151,6 +152,7 @@ static int create_and_bind(const char *host, char *port) {
 
 // start server instance, by setting hostname
 void start_server(const char *host) {
+    partition *buckets = (partition *) malloc(sizeof(partition));
     h_map *hashmap = m_create();
     int efd, sfd, s;
     struct epoll_event event, *events;
@@ -375,8 +377,8 @@ int process_command(h_map *hashmap, char *buffer, int sock_fd) {
     void *value = NULL;
     int ret = 0;
     command = strtok(buffer, " \r\n");
-    // print nothing on an empty command
     /* async_write(command); */
+    // print nothing on an empty command
     if (!command)
         return 1;
     if (strcasecmp(command, "SET") == 0) {
