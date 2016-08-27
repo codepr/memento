@@ -32,15 +32,6 @@ static int set_socket_non_blocking(int fd) {
     return 0;
 }
 
-static void remove_newline(const char *buf) {
-    char *newline = strrchr(buf, '\n');
-    if (newline)
-        *newline = '\0';
-    newline = strrchr(buf, '\r');
-    if (newline)
-        *newline = '\0';
-}
-
 /* callback function to find all keys with a given prefix */
 static int find_prefix(any_t t1, any_t t2) {
     char *key = (char *) t1;
@@ -361,11 +352,11 @@ static void trim(char *str) {
 
 /* auxiliary function to check wether a string is an integer */
 static int is_number(char *s) {
-    while(*s) {
-        if (isdigit(*s++) == 0) return 0;
-    }
+    int num;
+    if(sscanf(s, "%d", &num) == 0) return 0;
     return 1;
 }
+
 /* auxiliary function to convert integer contained inside string into int */
 static int to_int(char *p) {
     int len = 0;
@@ -384,8 +375,8 @@ static int to_int(char *p) {
  */
 int process_command(partition **buckets, char *buffer, int sock_fd) {
     char *command = NULL;
-    char *key = NULL;
-    void *value = NULL;
+    char *arg_1 = NULL;
+    void *arg_2 = NULL;
     int ret = 0;
     command = strtok(buffer, " \r\n");
     /* async_write(command); */
@@ -393,97 +384,89 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
     if (!command)
         return 1;
     if (strcasecmp(command, "SET") == 0) {
-        key = strtok(NULL, " ");
-        value = key + strlen(key) + 1;
-        if (key && value) {
-            remove_newline(value);
-            char *key_holder = malloc(strlen(key));
-            char *value_holder = malloc(strlen((char *) value));
-            strcpy(key_holder, key);
-            strcpy(value_holder, value);
-            int p_index = partition_hash(key_holder);
-            ret = m_put(buckets[p_index]->map, key_holder, value_holder);
+        arg_1 = strtok(NULL, " ");
+        arg_2 = arg_1 + strlen(arg_1) + 1;
+        if (arg_1 && arg_2) {
+            char *arg_1_holder = malloc(strlen(arg_1));
+            char *arg_2_holder = malloc(strlen((char *) arg_2));
+            strcpy(arg_1_holder, arg_1);
+            strcpy(arg_2_holder, arg_2);
+            int p_index = partition_hash(arg_1_holder);
+            ret = m_put(buckets[p_index]->map, arg_1_holder, arg_2_holder);
         }
     } else if (strcasecmp(command, "GET") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            int get = m_get(buckets[p_index]->map, key, &value);
-            if (get == MAP_OK && value) {
-                send(sock_fd, value, strlen((char *) value), 0);
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            int get = m_get(buckets[p_index]->map, arg_1, &arg_2);
+            if (get == MAP_OK && arg_2) {
+                send(sock_fd, arg_2, strlen((char *) arg_2), 0);
                 return 1;
             } else ret = MAP_MISSING;
         } else ret = MAP_MISSING;
     } else if (strcasecmp(command, "DEL") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            ret = m_remove(buckets[p_index]->map, key);
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            ret = m_remove(buckets[p_index]->map, arg_1);
         }
     } else if (strcasecmp(command, "SUB") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            ret = m_sub(buckets[p_index]->map, key, sock_fd);
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            ret = m_sub(buckets[p_index]->map, arg_1, sock_fd);
         }
     } else if (strcasecmp(command, "UNSUB") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            ret = m_unsub(buckets[p_index]->map, key, sock_fd);
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            ret = m_unsub(buckets[p_index]->map, arg_1, sock_fd);
         }
     } else if (strcasecmp(command, "PUB") == 0) {
-        key = strtok(NULL, " ");
-        value = key + strlen(key) + 1;
-        if (key && value) {
-            remove_newline(value);
-            char *key_holder = malloc(strlen(key));
-            char *value_holder = malloc(strlen((char *) value));
-            strcpy(key_holder, key);
-            strcpy(value_holder, value);
-            int p_index = partition_hash(key_holder);
-            ret = m_pub(buckets[p_index]->map, key_holder, value_holder);
+        arg_1 = strtok(NULL, " ");
+        arg_2 = arg_1 + strlen(arg_1) + 1;
+        if (arg_1 && arg_2) {
+            char *arg_1_holder = malloc(strlen(arg_1));
+            char *arg_2_holder = malloc(strlen((char *) arg_2));
+            strcpy(arg_1_holder, arg_1);
+            strcpy(arg_2_holder, arg_2);
+            int p_index = partition_hash(arg_1_holder);
+            ret = m_pub(buckets[p_index]->map, arg_1_holder, arg_2_holder);
         }
     } else if (strcasecmp(command, "INC") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            ret = m_get(buckets[p_index]->map, key, &value);
-            if (ret == MAP_OK && value) {
-                char *s = (char *) value;
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+            if (ret == MAP_OK && arg_2) {
+                char *s = (char *) arg_2;
                 if (is_number(s) == 1) {
                     int v = to_int(s);
                     v++;
-                    sprintf(value, "%d", v);
-                    ret = m_put(buckets[p_index]->map, key, value);
+                    sprintf(arg_2, "%d", v);
+                    ret = m_put(buckets[p_index]->map, arg_1, arg_2);
                 }
                 else return -1;
             } else return ret;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "DEC") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            ret = m_get(buckets[p_index]->map, key, &value);
-            if (ret == MAP_OK && value) {
-                char *s = (char *) value;
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+            if (ret == MAP_OK && arg_2) {
+                char *s = (char *) arg_2;
                 if(is_number(s) == 1) {
                     int v = to_int(s);
                     v--;
-                    sprintf(value, "%d", v);
-                    ret = m_put(buckets[p_index]->map, key, value);
+                    sprintf(arg_2, "%d", v);
+                    ret = m_put(buckets[p_index]->map, arg_1, arg_2);
                 }
                 else return -1;
             } else return ret;
@@ -507,42 +490,47 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                 m_iterate(buckets[i]->map, print_values, &sock_fd);
         ret = 1;
     } else if (strcasecmp(command, "TAIL") == 0) {
-        key = strtok(NULL, " ");
-        value = key + strlen(key) + 1;
-        if (key && value) {
-            remove_newline(value);
-            char *key_holder = malloc(strlen(key));
-            char *value_holder = malloc(strlen((char *) value));
-            strcpy(key_holder, key);
-            strcpy(value_holder, value);
-            if (is_number(value_holder)) {
-                int i = to_int(value_holder);
-                int p_index = partition_hash(key_holder);
-                m_sub_from(buckets[p_index]->map, key, sock_fd, i);
+        arg_1 = strtok(NULL, " ");
+        arg_2 = arg_1 + strlen(arg_1) + 1;
+        if (arg_1 && arg_2) {
+            char *arg_1_holder = malloc(strlen(arg_1));
+            char *arg_2_holder = malloc(strlen((char *) arg_2));
+            strcpy(arg_1_holder, arg_1);
+            strcpy(arg_2_holder, arg_2);
+            if (is_number(arg_2_holder)) {
+                int i = to_int(arg_2_holder);
+                int p_index = partition_hash(arg_1_holder);
+                m_sub_from(buckets[p_index]->map, arg_1, sock_fd, i);
                 ret = 1;
             } else return -1;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "PREFSCAN") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            ret = m_prefscan(buckets[p_index], find_prefix, key, sock_fd);
-            if (ret == MAP_OK) return 1;
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int flag = 0;
+            for (int i = 0; i < PARTITION_NUMBER; i++) {
+                if (buckets[i]->map->size > 0) {
+                    ret = m_prefscan(buckets[i]->map, find_prefix, arg_1, sock_fd);
+                    if (ret == MAP_OK) flag = 1;
+                }
+            }
+            if (flag == 1) return 1;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "FUZZYSCAN") == 0) {
-        key = strtok(NULL, " ");
-        if (key) {
-            remove_newline(key);
-            trim(key);
-            int p_index = partition_hash(key);
-            ret = m_fuzzyscan(buckets[p_index]->map, find_fuzzy_pattern, key, sock_fd);
-            if (ret == MAP_OK) return 1;
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int flag = 0;
+            for (int i = 0; i < PARTITION_NUMBER; i++) {
+                if (buckets[i]->map->size > 0) {
+                    ret = m_fuzzyscan(buckets[i]->map, find_fuzzy_pattern, arg_1, sock_fd);
+                    if (ret == MAP_OK) flag = 1;
+                }
+            }
+            if (flag == 1) return 1;
         }
     } else if (strcasecmp(command, "FLUSH") == 0) {
-        /* m_release(hashmap); */
-        /* hashmap = m_create(); */
         for (int i = 0; i < PARTITION_NUMBER; i++) {
             partition_release(buckets[i]);
             buckets[i] = create_partition();
