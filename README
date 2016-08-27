@@ -2,31 +2,37 @@
 SHIBUI
 =========================================
 
-Fairly basic hashmap implementation built on top of an async TCP server
-featuring epoll, a toy project just for learning purpose.
+Fairly basic hashmap/message queue implementation built on top of an async TCP
+server to handle multiple clients connections featuring epoll, and consistent
+hashing data distribution, a toy project just for learning purpose.
 
 The project is a minimal redis-like implementation with a text based protocol,
 currently supports basic operations:
 
-- SET key value
-- GET key
-- DEL key
-- INC key
-- DEC key
-- SUB key
-- UNSUB key
-- PUB key value
-- KEYS
-- VALUES
-- COUNT
-- TAIL key number
-- PREFSCAN key_prefix
-- FUZZYSCAN pattern
-- FLUSH
-- QUIT/EXIT
+- SET key value               sets <key> to <value>
+- GET key                     get the value identified by <key>
+- DEL key                     delete value identified by <key>
+- INC key                     increment by 1 the value idenfied by <key>
+- DEC key                     decrement by 1 the value idenfied by <key>
+- SUB key                     subscribe to <key>, receiving messages published
+- UNSUB key                   unsubscriber to <key>
+- PUB key value               publish message <value> to <key> (analog to set
+                              but broadcasting to all subscribed members of key)
+- KEYS                        list all keys stored into the keyspace
+- VALUES                      list all values stored into the keyspace
+- COUNT                       return the number of key-value pair stored
+- TAIL key offset             like SUB, but with an <offset> representing how
+                              many messages discard starting from 0 (the very
+                              first chronologically)
+- PREFSCAN key_prefix         scan the keyspace finding all values associated to
+                              keys matching <key_prefix> as prefix
+- FUZZYSCAN pattern           scan the keyspace finding all values associated to
+                              keys matching <pattern> in a fuzzy search way
+- FLUSH                       delete all maps stored inside partitions
+- QUIT/EXIT                   close connection
 
 All commands are case insensitive, so not strictly uppercase. Shibui can be used
-as a basic message broker through commands PUB/SUB to pulish messages to
+as a basic message broker through commands PUB/SUB to publish messages to
 multiple subscriber, using a key as a topic.
 Shibui server expect an optional arg to set an arbitrary host to listen on port
 6373, otherwise localhost will be automatically set.
@@ -40,14 +46,20 @@ with number as the offset for the depletion. 0 means from the start of the
 publication, increasing number discard the same quantity of messages starting
 from the oldest going to younger. E.g:
 
-topic_key
- - i am
- - a stream
- - of useless
- - messages
+pub topic_key i am
+pub topic_key a stream
+pub topic_key of useless
+pub topic_key messages
 
-tail topic_key 0 -> i ama streamof uselessmessages
-tail topic_key 2 -> of uselessmessages
+tail topic_key 0 ->
+i am
+a stream
+of useless
+messages
+
+tail topic_key 2 ->
+of useless
+messages
 
 All subsequent messages published to the key topic will be normally dispatched
 like a normal SUB command.
