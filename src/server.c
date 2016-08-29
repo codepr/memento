@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <arpa/inet.h>
@@ -82,13 +83,11 @@ static int print_values(any_t t1, any_t t2) {
 }
 
 /* static int async_write(char *str)  { */
-/*     char log[3] = "log"; */
-/*     int file = open(log, O_RDWR|O_APPEND); */
+/*     int file = open(PERSISTENCE_LOG, O_CREAT|O_RDWR|O_APPEND, 0644); */
 /*     if (file == -1) { */
 /*         perror("log"); */
 /*         exit(1); */
 /*     } */
-/*     /\* unlink(log); *\/ */
 
 /*     struct aiocb cb; */
 
@@ -98,16 +97,18 @@ static int print_values(any_t t1, any_t t2) {
 /*     memset(&cb, 0, sizeof(struct aiocb)); */
 /*     cb.aio_nbytes = strlen(str); */
 /*     cb.aio_fildes = file; */
-/*     cb.aio_buf = buf; */
+/*     cb.aio_buf = str; */
 /*     cb.aio_offset = 0; */
-/*     if (aio_write(&cb) == -1) { */
-/*         perror("error"); */
+
+/*     if (aio_write(&cb) != 0) { */
+/*         perror("aiocb"); */
 /*         return -1; */
 /*     } */
 
-/*     while (aio_error(&cb) == EINPROGRESS) */
-/*         close(file); */
+/*     while (aio_error(&cb) == EINPROGRESS) {} */
 
+
+/*     close(file); */
 /*     return 0; */
 /* } */
 
@@ -157,7 +158,9 @@ void start_server(const char *host) {
     partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
     for (int i = 0; i < PARTITION_NUMBER; i++)
         buckets[i] = create_partition();
-    /* h_map *hashmap = m_create(); */
+    struct stat st;
+    if (stat(PERSISTENCE_LOG, &st) == -1)
+        mkdir(PERSISTENCE_LOG, 0644);
     int efd, sfd, s;
     struct epoll_event event, *events;
 
@@ -378,8 +381,8 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
     char *arg_1 = NULL;
     void *arg_2 = NULL;
     int ret = 0;
+    /* async_write(buffer); */
     command = strtok(buffer, " \r\n");
-    /* async_write(command); */
     // print nothing on an empty command
     if (!command)
         return 1;
@@ -490,7 +493,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
         int len = 0;
         for (int i = 0; i < PARTITION_NUMBER; i++)
             len += m_length(buckets[i]);
-        char c_len[16];
+        char c_len[24];
         sprintf(c_len, "%d\n", len);
         send(sock_fd, c_len, 16, 0);
         return 1;

@@ -4,6 +4,7 @@
 #define PORT "6373"
 #define MAX_DATA_SIZE 10485760
 #define MAX_EVENTS 100
+#define PERSISTENCE_LOG "/tmp/shibui/log"
 
 #include "map.h"
 #include "partition.h"
