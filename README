@@ -28,6 +28,8 @@ currently supports basic operations:
                               keys matching <key_prefix> as prefix
 - FUZZYSCAN pattern           scan the keyspace finding all values associated to
                               keys matching <pattern> in a fuzzy search way
+- SUM key1 key2 ..            sum integer value inside key1 to key2 to keyN,
+                              ignoring values with no integer value
 - FLUSH                       delete all maps stored inside partitions
 - QUIT/EXIT                   close connection
 
@@ -106,6 +108,10 @@ TCP client.
 
 - Added partitioning to keyspace distribution, this should simplify an aventual
   distribution across multiple nodes.
+
+2016-08-29
+
+- Added new command `SUM key1 key2 keyN`, sum iteger values stored inside keys
 
 * TODO
 =========================================
