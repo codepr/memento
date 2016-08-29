@@ -1,9 +1,9 @@
 CC=gcc
-CFLAGS = -std=gnu99 -Wall -lrt
-SRC = src
-OBJS = $(SRC)/map.c $(SRC)/server.c $(SRC)/queue.c $(SRC)/partition.c $(SRC)/util.c
-BIN = main
-BIN_NAME = shibui
+CFLAGS=-std=gnu99 -Wall -lrt
+SRC=src/main.c src/map.c src/server.c src/queue.c src/partition.c src/util.c
 
-$(BIN): $(SRC)/$(BIN).c
-	$(CC) $(CFLAGS) $(SRC)/$(BIN).c $(OBJS) -o $(BIN_NAME)
+shibui: $(SRC)
+	$(CC) $(CFLAGS) $(SRC) -o shibui
+
+clean:
+	rm -f shibui
