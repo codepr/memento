@@ -11,11 +11,13 @@ currently supports basic operations:
 
 - SET key value               sets <key> to <value>
 - GET key                     get the value identified by <key>
-- DEL key                     delete value identified by <key>
-- INC key                     increment by 1 the value idenfied by <key>
-- DEC key                     decrement by 1 the value idenfied by <key>
-- SUB key                     subscribe to <key>, receiving messages published
-- UNSUB key                   unsubscriber to <key>
+- DEL key key2 .. keyN        delete values identified by <key>..<keyN>
+- INC key qty                 increment by <qty> the value idenfied by <key>, if
+                              no <qty> is specified increment by 1
+- DEC key qty                 decrement by <qty> the value idenfied by <key>, if
+                              no <qty> is specified decrement by 1
+- SUB key key2 .. keyN        subscribe to <key>..<keyN>, receiving messages published
+- UNSUB key key2 .. keyN      unsubscribe from <key>..<keyN>
 - PUB key value               publish message <value> to <key> (analog to set
                               but broadcasting to all subscribed members of key)
 - KEYS                        list all keys stored into the keyspace
@@ -28,8 +30,6 @@ currently supports basic operations:
                               keys matching <key_prefix> as prefix
 - FUZZYSCAN pattern           scan the keyspace finding all values associated to
                               keys matching <pattern> in a fuzzy search way
-- SUM key1 key2 ..            sum integer value inside key1 to key2 to keyN,
-                              ignoring values with no integer value
 - FLUSH                       delete all maps stored inside partitions
 - QUIT/EXIT                   close connection
 

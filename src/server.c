@@ -407,24 +407,33 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
         } else ret = MAP_MISSING;
     } else if (strcasecmp(command, "DEL") == 0) {
         arg_1 = strtok(NULL, " ");
-        if (arg_1) {
-            trim(arg_1);
-            int p_index = partition_hash(arg_1);
-            ret = m_remove(buckets[p_index]->map, arg_1);
+        while (arg_1 != NULL) {
+            if (arg_1) {
+                trim(arg_1);
+                int p_index = partition_hash(arg_1);
+                ret = m_remove(buckets[p_index]->map, arg_1);
+            }
+            arg_1 = strtok(NULL, " ");
         }
     } else if (strcasecmp(command, "SUB") == 0) {
         arg_1 = strtok(NULL, " ");
-        if (arg_1) {
-            trim(arg_1);
-            int p_index = partition_hash(arg_1);
-            ret = m_sub(buckets[p_index]->map, arg_1, sock_fd);
+        while (arg_1 != NULL) {
+            if (arg_1) {
+                trim(arg_1);
+                int p_index = partition_hash(arg_1);
+                ret = m_sub(buckets[p_index]->map, arg_1, sock_fd);
+            }
+            arg_1 = strtok(NULL, " ");
         }
     } else if (strcasecmp(command, "UNSUB") == 0) {
         arg_1 = strtok(NULL, " ");
-        if (arg_1) {
-            trim(arg_1);
-            int p_index = partition_hash(arg_1);
-            ret = m_unsub(buckets[p_index]->map, arg_1, sock_fd);
+        while (arg_1 != NULL) {
+            if (arg_1) {
+                trim(arg_1);
+                int p_index = partition_hash(arg_1);
+                ret = m_unsub(buckets[p_index]->map, arg_1, sock_fd);
+            }
+            arg_1 = strtok(NULL, " ");
         }
     } else if (strcasecmp(command, "PUB") == 0) {
         arg_1 = strtok(NULL, " ");
@@ -447,8 +456,11 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                 char *s = (char *) arg_2;
                 if (is_number(s) == 1) {
                     int v = to_int(s);
-                    v++;
-                    sprintf(arg_2, "%d", v);
+                    char *by = strtok(NULL, " ");
+                    if (by != NULL && is_number(by)) {
+                        v += to_int(by);
+                    } else v++;
+                    sprintf(arg_2, "%d\n", v);
                     ret = m_put(buckets[p_index]->map, arg_1, arg_2);
                 }
                 else return -1;
@@ -464,8 +476,11 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                 char *s = (char *) arg_2;
                 if(is_number(s) == 1) {
                     int v = to_int(s);
-                    v--;
-                    sprintf(arg_2, "%d", v);
+                    char *by = strtok(NULL, " ");
+                    if (by != NULL && is_number(by)) {
+                        v -= to_int(by);
+                    } else v--;
+                    sprintf(arg_2, "%d\n", v);
                     ret = m_put(buckets[p_index]->map, arg_1, arg_2);
                 }
                 else return -1;
@@ -476,7 +491,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
         for (int i = 0; i < PARTITION_NUMBER; i++)
             len += m_length(buckets[i]);
         char c_len[16];
-        sprintf(c_len, "%d", len);
+        sprintf(c_len, "%d\n", len);
         send(sock_fd, c_len, 16, 0);
         return 1;
     } else if (strcasecmp(command, "KEYS") == 0) {
@@ -530,25 +545,6 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             }
             if (flag == 1) return 1;
         }
-    } else if (strcasecmp(command, "SUM") == 0) {
-        int sum = 0;
-        arg_1 = strtok(NULL, " ");
-        while (arg_1 != NULL) {
-            if (arg_1) {
-                trim(arg_1);
-                int p_index = partition_hash(arg_1);
-                int get = m_get(buckets[p_index]->map, arg_1, &arg_2);
-                if (get == MAP_OK && arg_2) {
-                    if (is_number((char *) arg_2))
-                        sum += to_int(arg_2);
-                }
-            }
-            arg_1 = strtok(NULL, " ");
-        }
-        char result[15];
-        sprintf(result, "%d\n", sum);
-        send(sock_fd, result, strlen(result), 0);
-        ret = 1;
     } else if (strcasecmp(command, "FLUSH") == 0) {
         for (int i = 0; i < PARTITION_NUMBER; i++) {
             partition_release(buckets[i]);
