@@ -76,43 +76,6 @@ To build the source just run make. A shibui executable will be generated that
 can be started to listen on localhost:6737, ready to receive commands from any
 TCP client.
 
-* CHANGELOG
-=========================================
-
-2016-08-25
-
-- Added new command `TAIL key number`, consume all values published to a key and
-  subscribe to it. Number is the offset of the depletion, with 0 meaning "from
-  the very first" and incresing number discard subsequents messages.
-
-- Fixed some bugs e refactored some code.
-
-- Added new command `PREFSCAN key_prefix`, find all values associated to keys that
-  matches the prefix specified by key_prefix.
-
-2016-08-26
-
-- Added new command `FUZZYSCAN pattern`, perform a search through the keyspace
-  returning all values associated to keys that match a given pattern by fuzzy
-  search.
-
-- Added new command `UNSUB key` to stop receiving feeds from the key.
-
-- Added new command `FLUSH' to delete all keys in the keyspace
-
-- Fixed rehash_map code in order to update data history and the subscribers
-  array as well when resizing the map.
-
-- Added new commands `KEYS` and `VALUES` respectively return all keys and all
-  values stored in the hashmap
-
-- Added partitioning to keyspace distribution, this should simplify an aventual
-  distribution across multiple nodes.
-
-2016-08-29
-
-- Added new command `SUM key1 key2 keyN`, sum iteger values stored inside keys
-
 * TODO
 =========================================
 
