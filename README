@@ -71,6 +71,7 @@ hashing of the keys, this way should be simplier to eventually distribute data
 across multiple nodes.
 
 * BUILD
+=========================================
 
 To build the source just run make. A shibui executable will be generated that
 can be started to listen on localhost:6737, ready to receive commands from any
