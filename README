@@ -7,31 +7,33 @@ server to handle multiple clients connections featuring epoll, and consistent
 hashing data distribution, a toy project just for learning purpose.
 
 The project is a minimal redis-like implementation with a text based protocol,
-currently supports basic operations:
+currently supports some basic operations:
 
-- SET key value               sets <key> to <value>
-- GET key                     get the value identified by <key>
-- DEL key key2 .. keyN        delete values identified by <key>..<keyN>
-- INC key qty                 increment by <qty> the value idenfied by <key>, if
+- SET key value               Sets <key> to <value>
+- GET key                     Get the value identified by <key>
+- DEL key key2 .. keyN        Delete values identified by <key>..<keyN>
+- INC key qty                 Increment by <qty> the value idenfied by <key>, if
                               no <qty> is specified increment by 1
-- DEC key qty                 decrement by <qty> the value idenfied by <key>, if
+- DEC key qty                 Decrement by <qty> the value idenfied by <key>, if
                               no <qty> is specified decrement by 1
-- SUB key key2 .. keyN        subscribe to <key>..<keyN>, receiving messages published
-- UNSUB key key2 .. keyN      unsubscribe from <key>..<keyN>
-- PUB key value               publish message <value> to <key> (analog to set
+- SUB key key2 .. keyN        Subscribe to <key>..<keyN>, receiving messages published
+- UNSUB key key2 .. keyN      Unsubscribe from <key>..<keyN>
+- PUB key value               Publish message <value> to <key> (analog to set
                               but broadcasting to all subscribed members of key)
-- KEYS                        list all keys stored into the keyspace
-- VALUES                      list all values stored into the keyspace
-- COUNT                       return the number of key-value pair stored
-- TAIL key offset             like SUB, but with an <offset> representing how
+- APPEND key value            Append <value> to <key>
+- PREPEND key value           Prepend <value> to <key>
+- KEYS                        List all keys stored into the keyspace
+- VALUES                      List all values stored into the keyspace
+- COUNT                       Return the number of key-value pair stored
+- TAIL key offset             Like SUB, but with an <offset> representing how
                               many messages discard starting from 0 (the very
                               first chronologically)
-- PREFSCAN key_prefix         scan the keyspace finding all values associated to
+- PREFSCAN key_prefix         Scan the keyspace finding all values associated to
                               keys matching <key_prefix> as prefix
-- FUZZYSCAN pattern           scan the keyspace finding all values associated to
+- FUZZYSCAN pattern           Scan the keyspace finding all values associated to
                               keys matching <pattern> in a fuzzy search way
-- FLUSH                       delete all maps stored inside partitions
-- QUIT/EXIT                   close connection
+- FLUSH                       Delete all maps stored inside partitions
+- QUIT/EXIT                   Close connection
 
 All commands are case insensitive, so not strictly uppercase. Shibui can be used
 as a basic message broker through commands PUB/SUB to publish messages to

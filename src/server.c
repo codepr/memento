@@ -44,6 +44,19 @@ static int find_prefix(any_t t1, any_t t2) {
     return MAP_MISSING;
 }
 
+/* utility function, concat two strings togheter */
+static char *append_string(const char *str, const char *token) {
+    size_t len = strlen(str) + strlen(token);
+    char *ret = (char *) malloc(len * sizeof(char) + 1);
+    *ret = '\0';
+    return strcat(strcat(ret, str), token);
+}
+
+/* utility function, remove trailing newline */
+static void remove_newline(char *str) {
+    str[strcspn(str, "\r\n")] = 0;
+}
+
 /* callback function to match a given pattern by fuzzy searching it */
 static int find_fuzzy_pattern(any_t t1, any_t t2) {
     char *key = (char *) t1;
@@ -113,7 +126,7 @@ static int print_values(any_t t1, any_t t2) {
 /* } */
 
 // auxiliary method for creating epoll server
-static int create_and_bind(const char *host, char *port) {
+static int create_and_bind(const char *host, const char *port) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
     int s, sfd;
@@ -304,6 +317,9 @@ void start_server(const char *host) {
                     case MAP_OMEM:
                         send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
                         break;
+                    case CONNECTION_END:
+                        done = 1;
+                        break;
                     default:
                         break;
                     }
@@ -428,6 +444,17 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             }
             arg_1 = strtok(NULL, " ");
         }
+    } else if (strcasecmp(command, "SUBFILTER") == 0) {
+        arg_1 = strtok(NULL, "->");
+        arg_2 = strtok(NULL, " ");
+        while (arg_2 != NULL) {
+            if (arg_2) {
+                trim(arg_2);
+                int p_index = partition_hash(arg_2);
+                ret = m_filter_sub(buckets[p_index]->map, arg_1, sock_fd, arg_1);
+            }
+            arg_2 = strtok(NULL, " ");
+        }
     } else if (strcasecmp(command, "UNSUB") == 0) {
         arg_1 = strtok(NULL, " ");
         while (arg_1 != NULL) {
@@ -465,8 +492,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                     } else v++;
                     sprintf(arg_2, "%d\n", v);
                     ret = m_put(buckets[p_index]->map, arg_1, arg_2);
-                }
-                else return -1;
+                } else return MAP_MISSING;
             } else return ret;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "DEC") == 0) {
@@ -485,8 +511,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                     } else v--;
                     sprintf(arg_2, "%d\n", v);
                     ret = m_put(buckets[p_index]->map, arg_1, arg_2);
-                }
-                else return -1;
+                } else return MAP_MISSING;
             } else return ret;
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "COUNT") == 0) {
@@ -548,6 +573,40 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             }
             if (flag == 1) return 1;
         }
+    } else if (strcasecmp(command, "APPEND") == 0) {
+        arg_1 = strtok(NULL, " ");
+        arg_2 = arg_1 + strlen(arg_1) + 1;
+        if (arg_1 && arg_2) {
+            char *arg_1_holder = malloc(strlen(arg_1));
+            char *arg_2_holder = malloc(strlen((char *) arg_2));
+            strcpy(arg_1_holder, arg_1);
+            strcpy(arg_2_holder, arg_2);
+            int p_index = partition_hash(arg_1_holder);
+            void *val = NULL;
+            ret = m_get(buckets[p_index]->map, arg_1_holder, &val);
+            if (ret == MAP_OK) {
+                remove_newline(val);
+                char *append = append_string(val, arg_2_holder);
+                ret = m_put(buckets[p_index]->map, arg_1_holder, append);
+            }
+        } else return MAP_MISSING;
+    } else if (strcasecmp(command, "PREPEND") == 0) {
+        arg_1 = strtok(NULL, " ");
+        arg_2 = arg_1 + strlen(arg_1) + 1;
+        if (arg_1 && arg_2) {
+            char *arg_1_holder = malloc(strlen(arg_1));
+            char *arg_2_holder = malloc(strlen((char *) arg_2));
+            strcpy(arg_1_holder, arg_1);
+            strcpy(arg_2_holder, arg_2);
+            int p_index = partition_hash(arg_1_holder);
+            void *val = NULL;
+            ret = m_get(buckets[p_index]->map, arg_1_holder, &val);
+            if (ret == MAP_OK) {
+                remove_newline(arg_2_holder);
+                char *append = append_string(arg_2_holder, val);
+                ret = m_put(buckets[p_index]->map, arg_1_holder, append);
+            }
+        } else return MAP_MISSING;
     } else if (strcasecmp(command, "FLUSH") == 0) {
         for (int i = 0; i < PARTITION_NUMBER; i++) {
             partition_release(buckets[i]);
@@ -555,9 +614,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
         }
         ret = MAP_OK;
     } else if (strcasecmp(command, "QUIT") == 0 || strcasecmp(command, "EXIT") == 0) {
-        printf("Connection closed on descriptor %d\n", sock_fd);
-        close(sock_fd);
-        return 1;
+        ret = CONNECTION_END;
     } else ret = 1;
     return ret;
 }

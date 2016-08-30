@@ -1,6 +1,10 @@
 * CHANGELOG
 =========================================
 
+2016-08-30
+
+- Corrected some bug, added new commands `APPEND key value` and `PREPEND key value`
+
 2016-08-29
 
 - Altered some commands, now DEL, SUB and UNSUB accept a list of keys, INC and

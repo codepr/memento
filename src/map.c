@@ -306,6 +306,39 @@ int m_sub(map_t in, char *key, int fd) {
 }
 
 /*
+ * subscribe to a key in the keyspace, adding a file descriptor representing a
+ * socket to the array of subscribers of the pair identified by key, filtering
+ * values following pattern.
+ */
+int m_filter_sub(map_t in, char *key, int fd, char *pattern) {
+    int i, curr, last;
+    h_map *m;
+
+    m = (h_map *) in;
+
+    curr = hashmap_hash_int(m, key);
+    /* Linear probing, if necessary */
+    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+        int in_use = m->data[curr].in_use;
+        if (in_use == 1) {
+            if (strcmp(m->data[curr].key, key) == 0) {
+                last = m->data[curr].last_subscriber;
+                if(already_in(m->data[curr].subscribers, fd, last) == -1) {
+                    m->data[curr].subscribers[last] = fd;
+                    m->data[curr].last_subscriber++;
+                }
+                return MAP_OK;
+            }
+        }
+
+        curr = (curr + 1) % m->table_size;
+    }
+
+    /* Not found */
+    return MAP_MISSING;
+}
+
+/*
  * unsubscribe from a key removin the file descriptor representing the socket
  * from the array of subscribers of the pair identified by keyspace
  */
