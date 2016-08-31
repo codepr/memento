@@ -5,5 +5,8 @@ SRC=src/main.c src/map.c src/server.c src/queue.c src/partition.c src/util.c
 shibui: $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o shibui
 
+shibui-cli: src/shibui-cli.c
+	$(CC) $(CFLAGS) src/shibui-cli.c -o shibui-cli
+
 clean:
 	rm -f shibui

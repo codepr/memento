@@ -44,7 +44,6 @@ int m_get(map_t, char *, any_t *);
 int m_remove(map_t, char *);
 int m_get_one(map_t, any_t *, int);
 int m_sub(map_t, char *, int);
-int m_filter_sub(map_t, char *, int, char *);
 int m_sub_from(map_t, char *, int, int);
 int m_unsub(map_t, char *, int);
 int m_pub(map_t, char *, any_t);

@@ -1,6 +1,11 @@
 * CHANGELOG
 =========================================
 
+2016-08-31
+
+- Started shibui-cli, supports basic commands without any human readability
+  improvement
+
 2016-08-30
 
 - Corrected some bug, added new commands `APPEND key value` and `PREPEND key value`

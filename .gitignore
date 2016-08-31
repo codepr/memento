@@ -1,4 +1,5 @@
 shibui
+shibui-cli
 *.d
 *.o
 *.ko

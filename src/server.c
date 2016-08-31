@@ -17,6 +17,8 @@
 #include "server.h"
 #include "partition.h"
 
+#define COMMAND_NOT_FOUND -4
+
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
     int flags, result;
@@ -317,6 +319,9 @@ void start_server(const char *host) {
                     case MAP_OMEM:
                         send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
                         break;
+                    case COMMAND_NOT_FOUND:
+                        send(events[i].data.fd, "COMMAND NOT FOUND\n", 18, 0);
+                        break;
                     case CONNECTION_END:
                         done = 1;
                         break;
@@ -404,8 +409,9 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
         return 1;
     if (strcasecmp(command, "SET") == 0) {
         arg_1 = strtok(NULL, " ");
-        arg_2 = arg_1 + strlen(arg_1) + 1;
-        if (arg_1 && arg_2) {
+        if (arg_1)
+            arg_2 = arg_1 + strlen(arg_1) + 1;
+        if (arg_2) {
             char *arg_1_holder = malloc(strlen(arg_1));
             char *arg_2_holder = malloc(strlen((char *) arg_2));
             strcpy(arg_1_holder, arg_1);
@@ -443,17 +449,6 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                 ret = m_sub(buckets[p_index]->map, arg_1, sock_fd);
             }
             arg_1 = strtok(NULL, " ");
-        }
-    } else if (strcasecmp(command, "SUBFILTER") == 0) {
-        arg_1 = strtok(NULL, "->");
-        arg_2 = strtok(NULL, " ");
-        while (arg_2 != NULL) {
-            if (arg_2) {
-                trim(arg_2);
-                int p_index = partition_hash(arg_2);
-                ret = m_filter_sub(buckets[p_index]->map, arg_1, sock_fd, arg_1);
-            }
-            arg_2 = strtok(NULL, " ");
         }
     } else if (strcasecmp(command, "UNSUB") == 0) {
         arg_1 = strtok(NULL, " ");
@@ -520,7 +515,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             len += m_length(buckets[i]);
         char c_len[24];
         sprintf(c_len, "%d\n", len);
-        send(sock_fd, c_len, 16, 0);
+        send(sock_fd, c_len, 24, 0);
         return 1;
     } else if (strcasecmp(command, "KEYS") == 0) {
         for (int i = 0; i < PARTITION_NUMBER; i++)
@@ -615,6 +610,6 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
         ret = MAP_OK;
     } else if (strcasecmp(command, "QUIT") == 0 || strcasecmp(command, "EXIT") == 0) {
         ret = CONNECTION_END;
-    } else ret = 1;
+    } else ret = COMMAND_NOT_FOUND;
     return ret;
 }
