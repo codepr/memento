@@ -7,13 +7,10 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
-#define CMD_BUFSIZE 1024
-#define CMD_TOK_BUFSIZE 64
-#define CMD_TOK_DELIM " \t\r\n\a"
+#define CMD_BUFSIZE 10485760
 
 void command_loop(int, char *, char *);
 char *read_command();
-char **split_line(char *);
 
 int main(int argc, char **argv) {
     int sock_fd, port;

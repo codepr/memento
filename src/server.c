@@ -127,7 +127,7 @@ static int print_values(any_t t1, any_t t2) {
 /*     return 0; */
 /* } */
 
-// auxiliary method for creating epoll server
+// auxiliary function for creating epoll server
 static int create_and_bind(const char *host, const char *port) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
@@ -136,7 +136,7 @@ static int create_and_bind(const char *host, const char *port) {
     memset (&hints, 0, sizeof (struct addrinfo));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;     /* All interfaces */
+    hints.ai_flags = AI_PASSIVE;     /* 0.0.0.0 all interfaces */
 
     s = getaddrinfo(host, port, &hints, &result);
     if (s != 0) {
@@ -214,7 +214,7 @@ void start_server(const char *host) {
         printf("Server listening on 127.0.0.1:%s\n", PORT);
     else printf("Server listening on %s:%s\n", host, PORT);
 
-    /* starti the event loop */
+    /* start the event loop */
     while (1) {
         int n, i;
 
