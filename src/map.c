@@ -93,19 +93,16 @@ static int already_in(int *arr, int fd, int size) {
 
 static int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
     int i, curr;
-    h_map* m;
-
-    /* Cast the hashmap */
-    m = (h_map *) in;
+    h_map* m = (h_map *) in;
 
     /* Find data location */
     curr = hashmap_hash_int(m, key);
 
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for(i = 0; i < MAX_CHAIN_LENGTH; i++) {
         int in_use = m->data[curr].in_use;
         if (in_use == 1) {
-            if (strcmp(m->data[curr].key, key) == 0){
+            if (strcmp(m->data[curr].key, key) == 0) {
                 *arg = m->data[curr];
                 return MAP_OK;
             }
@@ -196,6 +193,9 @@ int m_put(map_t in, char* key, any_t value) {
     m->data[index].key = key;
     if (m->data[index].in_use == 0) {
         m->data[index].in_use = 1;
+        m->data[index].has_expire_time = 0;
+        m->data[index].expire_time = -1;
+        m->data[index].creation_time = current_timestamp();
         m->size++;
         m->data[index].last_subscriber = 0;
         m->data[index].subscribers = (int *) malloc(sizeof(int) * SUBSCRIBER_SIZE);
@@ -229,6 +229,9 @@ int m_pub(map_t in, char* key, any_t value) {
     m->data[index].key = key;
     if (m->data[index].in_use == 0) {
         m->data[index].in_use = 1;
+        m->data[index].has_expire_time = 0;
+        m->data[index].expire_time = -1;
+        m->data[index].creation_time = current_timestamp();
         m->size++;
         m->data[index].last_subscriber = 0;
         m->data[index].subscribers = (int *) malloc(sizeof(int) * 64);
@@ -257,8 +260,8 @@ int m_get(map_t in, char *key, any_t *arg) {
     /* Linear probing, if necessary */
     for(i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
-        if (in_use == 1){
-            if (strcmp(m->data[curr].key, key) == 0){
+        if (in_use == 1) {
+            if (strcmp(m->data[curr].key, key) == 0) {
                 *arg = (m->data[curr].data);
                 return MAP_OK;
             }
@@ -268,6 +271,39 @@ int m_get(map_t in, char *key, any_t *arg) {
     }
 
     *arg = NULL;
+
+    /* Not found */
+    return MAP_MISSING;
+}
+
+/*
+ * Get key-value pair represented by key in the hashmap
+ */
+int m_set_expire_time(map_t in, char *key, long expire_time) {
+    int i, curr;
+    h_map* m = (h_map *) in;
+
+    /* Find data location */
+    curr = hashmap_hash_int(m, key);
+
+    /* Linear probing, if necessary */
+    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+        int in_use = m->data[curr].in_use;
+        if (in_use == 1) {
+            if (strcmp(m->data[curr].key, key) == 0) {
+                if (expire_time == 0) {
+                    m->data[curr].expire_time = -1;
+                    m->data[curr].has_expire_time = 0;
+                } else {
+                    m->data[curr].expire_time = expire_time;
+                    m->data[curr].has_expire_time = 1;
+                }
+                return MAP_OK;
+            }
+        }
+
+        curr = (curr + 1) % m->table_size;
+    }
 
     /* Not found */
     return MAP_MISSING;
@@ -401,7 +437,6 @@ int m_iterate(map_t in, func f, any_t item) {
     /* Linear probing */
     for(i = 0; i < m->table_size; i++)
         if (m->data[i].in_use != 0) {
-            /* any_t data = (any_t) (m->data[i].data); */
             kv_pair data = m->data[i];
             int status = f(item, &data);
             if (status != MAP_OK) {
@@ -433,6 +468,9 @@ int m_remove(map_t in, char* key) {
             if (strcmp(m->data[curr].key, key) == 0){
                 /* Blank out the fields */
                 m->data[curr].in_use = 0;
+                m->data[curr].has_expire_time = 0;
+                m->data[curr].expire_time = -1;
+                m->data[curr].creation_time = current_timestamp();
                 free(m->data[curr].subscribers);
                 release_queue(m->data[curr].data_history);
                 m->data[curr].last_subscriber = 0;

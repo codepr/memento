@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <sys/time.h>
 #include "util.h"
 
 /* The implementation here was originally done by Gary S. Brown. Slighltly
@@ -100,7 +102,6 @@ static unsigned long crc32_tab[] = {
 };
 
 /* Return a 32-bit CRC of the contents of the buffer. */
-
 unsigned long crc32(const unsigned char *s, unsigned int len) {
     unsigned int i;
     unsigned long crc32val;
@@ -112,3 +113,12 @@ unsigned long crc32(const unsigned char *s, unsigned int len) {
     return crc32val;
 }
 
+/*
+ * Return the current timestamp in milliseconds
+ */
+long long current_timestamp(void) {
+    struct timeval te;
+    gettimeofday(&te, NULL);
+    long long ms = te.tv_sec * 1000LL + te.tv_usec / 1000;
+    return ms;
+}

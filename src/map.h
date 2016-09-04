@@ -21,6 +21,9 @@ typedef int (*func)(any_t, any_t);
 typedef struct _kv_pair {
     char *key;
     int in_use;
+    int has_expire_time;
+    long creation_time;
+    long expire_time;
     any_t data;
     int *subscribers;
     int last_subscriber;
@@ -41,6 +44,7 @@ int m_prefscan(map_t, func, any_t, int);
 int m_fuzzyscan(map_t, func, any_t, int);
 int m_put(map_t, char *, any_t);
 int m_get(map_t, char *, any_t *);
+int m_set_expire_time(map_t, char *, long);
 int m_remove(map_t, char *);
 int m_get_one(map_t, any_t *, int);
 int m_sub(map_t, char *, int);

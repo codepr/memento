@@ -14,10 +14,15 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <aio.h>
+#include <pthread.h>
+#include "util.h"
 #include "server.h"
 #include "partition.h"
 
 #define COMMAND_NOT_FOUND -4
+
+static unsigned int is_checking = 0;
+static pthread_t t;
 
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
@@ -33,6 +38,41 @@ static int set_socket_non_blocking(int fd) {
         return -1;
     }
     return 0;
+}
+
+static int check_expire_time(any_t t1, any_t t2) {
+    long current_ms = current_timestamp();
+    h_map *m = (h_map *) t1;
+    kv_pair *kv = (kv_pair *) t2;
+    if (m && kv) {
+        printf("%s -> %d\n", kv->key, kv->has_expire_time);
+        if (kv->has_expire_time != 0) {
+            long delta = current_ms - kv->creation_time;
+            printf("%ld <=> %ld\n", delta, kv->expire_time);
+            if (delta >= kv->expire_time) {
+                printf("deleting..\n");
+                kv->expire_time = -1;
+                kv->in_use = 0;
+                m_remove(m, kv->key);
+            }
+        }
+    }
+    return 1;
+}
+
+static void *expire_control_pthread(void *arg) {
+    partition **buckets = (partition **) arg;
+    if (buckets) {
+        while(1) {
+            for (int i = 0; i < PARTITION_NUMBER; i++) {
+                if (buckets[i]->map->size > 0) {
+                    m_iterate(buckets[i]->map, check_expire_time, buckets[1]->map);
+                }
+            }
+            sleep(5);
+        }
+    }
+    return NULL;
 }
 
 /* callback function to find all keys with a given prefix */
@@ -603,6 +643,24 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                 remove_newline(arg_2_holder);
                 char *append = append_string(arg_2_holder, val);
                 ret = m_put(buckets[p_index]->map, arg_1_holder, append);
+            }
+        } else return MAP_MISSING;
+    } else if (strcasecmp(command, "EXPIRE") == 0) {
+        arg_1 = strtok(NULL, " ");
+        arg_2 = arg_1 + strlen(arg_1) + 1;
+        if (arg_1 && arg_2) {
+            char *arg_1_holder = malloc(strlen(arg_1));
+            char *arg_2_holder = malloc(strlen((char *) arg_2));
+            strcpy(arg_1_holder, arg_1);
+            strcpy(arg_2_holder, arg_2);
+            int p_index = partition_hash(arg_1_holder);
+            ret = m_set_expire_time(buckets[p_index]->map, arg_1_holder, (long) to_int(arg_2_holder));
+            if (ret == MAP_OK) {
+                if (is_checking == 0) {
+                    if (pthread_create(&t, NULL, &expire_control_pthread, buckets) != 0)
+                        perror("ERROR pthread");
+                    is_checking = 1;
+                }
             }
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "FLUSH") == 0) {
