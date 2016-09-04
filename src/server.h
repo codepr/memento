@@ -10,7 +10,7 @@
 #include "map.h"
 #include "partition.h"
 
-void start_server(const char *);
+void start_server(const char *, const char *);
 int process_command(partition **, char *, int);
 
 #endif

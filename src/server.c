@@ -59,6 +59,16 @@ static void remove_newline(char *str) {
     str[strcspn(str, "\r\n")] = 0;
 }
 
+/* auxiliary function to convert integer contained inside string into int */
+static int to_int(char *p) {
+    int len = 0;
+    while(isdigit(*p)) {
+        len = (len * 10) + (*p - '0');
+        p++;
+    }
+    return len;
+}
+
 /* callback function to match a given pattern by fuzzy searching it */
 static int find_fuzzy_pattern(any_t t1, any_t t2) {
     char *key = (char *) t1;
@@ -169,17 +179,20 @@ static int create_and_bind(const char *host, const char *port) {
 }
 
 // start server instance, by setting hostname
-void start_server(const char *host) {
+void start_server(const char *host, const char* port) {
+    // partiton buckets, every bucket can contain a variable number of
+    // key-value pair
     partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
     for (int i = 0; i < PARTITION_NUMBER; i++)
         buckets[i] = create_partition();
+    // initialize log for persistence
     struct stat st;
     if (stat(PERSISTENCE_LOG, &st) == -1)
         mkdir(PERSISTENCE_LOG, 0644);
     int efd, sfd, s;
     struct epoll_event event, *events;
 
-    sfd = create_and_bind(host, PORT);
+    sfd = create_and_bind(host, port);
     if (sfd == -1)
         abort();
 
@@ -211,8 +224,8 @@ void start_server(const char *host) {
     events = calloc(MAX_EVENTS, sizeof event);
 
     if (host == NULL)
-        printf("Server listening on 127.0.0.1:%s\n", PORT);
-    else printf("Server listening on %s:%s\n", host, PORT);
+        printf("Server listening on 127.0.0.1:%s\n", port);
+    else printf("Server listening on %s:%s\n", host, port);
 
     /* start the event loop */
     while (1) {
@@ -381,16 +394,6 @@ static int is_number(char *s) {
     return 1;
 }
 
-/* auxiliary function to convert integer contained inside string into int */
-static int to_int(char *p) {
-    int len = 0;
-    while(isdigit(*p)) {
-        len = (len * 10) + (*p - '0');
-        p++;
-    }
-    return len;
-}
-
 /*
  * process incoming request from the file descriptor socket represented by
  * sock_fd, buckets is an array of partition, every partition store an instance
@@ -512,7 +515,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
     } else if (strcasecmp(command, "COUNT") == 0) {
         int len = 0;
         for (int i = 0; i < PARTITION_NUMBER; i++)
-            len += m_length(buckets[i]);
+            len += m_length(buckets[i]->map);
         char c_len[24];
         sprintf(c_len, "%d\n", len);
         send(sock_fd, c_len, 24, 0);
