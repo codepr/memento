@@ -20,9 +20,9 @@
 #include "partition.h"
 
 #define COMMAND_NOT_FOUND -4
+#define EXPIRATION_CHECK_INTERVAL 3 // check every 3s
 
 static unsigned int is_checking = 0;
-static pthread_t t;
 
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
@@ -40,20 +40,48 @@ static int set_socket_non_blocking(int fd) {
     return 0;
 }
 
+/* utility function, concat two strings togheter */
+static char *append_string(const char *str, const char *token) {
+    size_t len = strlen(str) + strlen(token);
+    char *ret = (char *) malloc(len * sizeof(char) + 1);
+    *ret = '\0';
+    return strcat(strcat(ret, str), token);
+}
+
+/*
+ * trim string, removing leading and trailing spaces
+ */
+static void trim(char *str) {
+    int i;
+    int begin = 0;
+    int end = strlen(str) - 1;
+
+    while (isspace(str[begin]))
+        begin++;
+
+    while ((end >= begin) && isspace(str[end]))
+        end--;
+
+    // Shift all characters back to the start of the string array.
+    for (i = begin; i <= end; i++)
+        str[i - begin] = str[i];
+
+    str[i - begin] = '\0'; // Null terminate string.
+}
+
 static int check_expire_time(any_t t1, any_t t2) {
     long current_ms = current_timestamp();
     h_map *m = (h_map *) t1;
     kv_pair *kv = (kv_pair *) t2;
     if (m && kv) {
-        printf("%s -> %d\n", kv->key, kv->has_expire_time);
-        if (kv->has_expire_time != 0) {
+        if (kv->in_use == 1 && kv->has_expire_time != 0) {
             long delta = current_ms - kv->creation_time;
             printf("%ld <=> %ld\n", delta, kv->expire_time);
             if (delta >= kv->expire_time) {
-                printf("deleting..\n");
-                kv->expire_time = -1;
-                kv->in_use = 0;
-                m_remove(m, kv->key);
+                trim(kv->key);
+                int remove = m_remove(m, kv->key);
+                if (remove == MAP_MISSING)
+                    printf("MISSING\n");
             }
         }
     }
@@ -66,10 +94,10 @@ static void *expire_control_pthread(void *arg) {
         while(1) {
             for (int i = 0; i < PARTITION_NUMBER; i++) {
                 if (buckets[i]->map->size > 0) {
-                    m_iterate(buckets[i]->map, check_expire_time, buckets[1]->map);
+                    m_iterate(buckets[i]->map, check_expire_time, buckets[i]->map);
                 }
             }
-            sleep(5);
+            sleep(EXPIRATION_CHECK_INTERVAL);
         }
     }
     return NULL;
@@ -84,14 +112,6 @@ static int find_prefix(any_t t1, any_t t2) {
         return MAP_OK;
     }
     return MAP_MISSING;
-}
-
-/* utility function, concat two strings togheter */
-static char *append_string(const char *str, const char *token) {
-    size_t len = strlen(str) + strlen(token);
-    char *ret = (char *) malloc(len * sizeof(char) + 1);
-    *ret = '\0';
-    return strcat(strcat(ret, str), token);
 }
 
 /* utility function, remove trailing newline */
@@ -220,8 +240,9 @@ static int create_and_bind(const char *host, const char *port) {
 
 // start server instance, by setting hostname
 void start_server(const char *host, const char* port) {
-    // partiton buckets, every bucket can contain a variable number of
+    // partition buckets, every bucket can contain a variable number of
     // key-value pair
+    pthread_t t;
     partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
     for (int i = 0; i < PARTITION_NUMBER; i++)
         buckets[i] = create_partition();
@@ -229,6 +250,12 @@ void start_server(const char *host, const char* port) {
     struct stat st;
     if (stat(PERSISTENCE_LOG, &st) == -1)
         mkdir(PERSISTENCE_LOG, 0644);
+    // start expiration time checking thread
+    if (is_checking == 0) {
+        if (pthread_create(&t, NULL, &expire_control_pthread, buckets) != 0)
+            perror("ERROR pthread");
+        is_checking = 1;
+    }
     int efd, sfd, s;
     struct epoll_event event, *events;
 
@@ -403,28 +430,6 @@ void start_server(const char *host, const char* port) {
     close(sfd);
 
     return;
-}
-
-/*
- * trim string, removing leading and trailing spaces
- */
-
-static void trim(char *str) {
-    int i;
-    int begin = 0;
-    int end = strlen(str) - 1;
-
-    while (isspace(str[begin]))
-        begin++;
-
-    while ((end >= begin) && isspace(str[end]))
-        end--;
-
-    // Shift all characters back to the start of the string array.
-    for (i = begin; i <= end; i++)
-        str[i - begin] = str[i];
-
-    str[i - begin] = '\0'; // Null terminate string.
 }
 
 /* auxiliary function to check wether a string is an integer */
@@ -655,13 +660,13 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             strcpy(arg_2_holder, arg_2);
             int p_index = partition_hash(arg_1_holder);
             ret = m_set_expire_time(buckets[p_index]->map, arg_1_holder, (long) to_int(arg_2_holder));
-            if (ret == MAP_OK) {
-                if (is_checking == 0) {
-                    if (pthread_create(&t, NULL, &expire_control_pthread, buckets) != 0)
-                        perror("ERROR pthread");
-                    is_checking = 1;
-                }
-            }
+            /* if (ret == MAP_OK) { */
+            /*     if (is_checking == 0) { */
+            /*         if (pthread_create(&t, NULL, &expire_control_pthread, buckets) != 0) */
+            /*             perror("ERROR pthread"); */
+            /*         is_checking = 1; */
+            /*     } */
+            /* } */
         } else return MAP_MISSING;
     } else if (strcasecmp(command, "FLUSH") == 0) {
         for (int i = 0; i < PARTITION_NUMBER; i++) {

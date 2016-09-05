@@ -425,17 +425,13 @@ int m_sub_from(map_t in, char *key, int fd, int index) {
  * argument and the pair is the second.
  */
 int m_iterate(map_t in, func f, any_t item) {
-    int i;
-
     /* Cast the hashmap */
     h_map* m = (h_map*) in;
-
     /* On empty hashmap, return immediately */
     if (m_length(m) <= 0)
         return MAP_MISSING;
-
     /* Linear probing */
-    for(i = 0; i < m->table_size; i++)
+    for(int i = 0; i < m->table_size; i++)
         if (m->data[i].in_use != 0) {
             kv_pair data = m->data[i];
             int status = f(item, &data);
@@ -443,7 +439,6 @@ int m_iterate(map_t in, func f, any_t item) {
                 return status;
             }
         }
-
     return MAP_OK;
 }
 
@@ -451,30 +446,24 @@ int m_iterate(map_t in, func f, any_t item) {
  * Remove an element with that key from the map
  */
 int m_remove(map_t in, char* key) {
-    int i, curr;
-    h_map* m;
-
-    /* Cast the hashmap */
-    m = (h_map *) in;
-
+    int curr;
+    h_map* m = (h_map *) in;
     /* Find key */
     curr = hashmap_hash_int(m, key);
-
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
-
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++) {
+        // check wether the position in array is in use
         int in_use = m->data[curr].in_use;
         if (in_use == 1) {
-            if (strcmp(m->data[curr].key, key) == 0){
+            if (strcmp(m->data[curr].key, key) == 0) {
                 /* Blank out the fields */
                 m->data[curr].in_use = 0;
                 m->data[curr].has_expire_time = 0;
                 m->data[curr].expire_time = -1;
-                m->data[curr].creation_time = current_timestamp();
+                m->data[curr].creation_time = -1;
                 free(m->data[curr].subscribers);
                 release_queue(m->data[curr].data_history);
                 m->data[curr].last_subscriber = 0;
-
                 /* Reduce the size */
                 m->size--;
                 return MAP_OK;
@@ -482,7 +471,6 @@ int m_remove(map_t in, char* key) {
         }
         curr = (curr + 1) % m->table_size;
     }
-
     /* Data not found */
     return MAP_MISSING;
 }
