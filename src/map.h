@@ -20,8 +20,8 @@ typedef int (*func)(any_t, any_t);
 /* We need to keep keys and values */
 typedef struct _kv_pair {
     char *key;
-    int in_use;
-    int has_expire_time;
+    unsigned int in_use : 1;
+    unsigned int has_expire_time : 1;
     long creation_time;
     long expire_time;
     any_t data;

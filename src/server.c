@@ -22,7 +22,7 @@
 #define COMMAND_NOT_FOUND -4
 #define EXPIRATION_CHECK_INTERVAL 3 // check every 3s
 
-static unsigned int is_checking = 0;
+static unsigned int is_checking = 1;
 
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
