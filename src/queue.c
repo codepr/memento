@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "queue.h"
 
-queue *create_queue() {
+queue *create_queue(void) {
     queue *q = (queue*) malloc(sizeof(queue));
     q->last = 0;
     q->front = q->rear = NULL;

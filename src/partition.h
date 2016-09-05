@@ -9,7 +9,7 @@ typedef struct _partition {
     h_map *map;
 } partition;
 
-partition *create_partition();
+partition *create_partition(void);
 int partition_release(partition *);
 int partition_hash(char *);
 

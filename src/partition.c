@@ -2,7 +2,7 @@
 #include "util.h"
 #include "partition.h"
 
-partition *create_partition() {
+partition *create_partition(void) {
     partition *p = (partition *) malloc(sizeof(partition));
     p->map = m_create();
     return p;

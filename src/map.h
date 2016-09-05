@@ -38,7 +38,7 @@ typedef struct _h_map {
     kv_pair *data;
 } h_map;
 
-map_t m_create();
+map_t m_create(void);
 int m_iterate(map_t, func, any_t);
 int m_prefscan(map_t, func, any_t, int);
 int m_fuzzyscan(map_t, func, any_t, int);

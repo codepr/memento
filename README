@@ -22,6 +22,9 @@ currently supports some basic operations:
                               but broadcasting to all subscribed members of key)
 - APPEND key value            Append <value> to <key>
 - PREPEND key value           Prepend <value> to <key>
+- EXPIRE key ms               Set an expire time in milliseconds after that the <key>
+                              will be deleted, upon taking -1 as <ms> value the
+                              expire time will be removed
 - KEYS                        List all keys stored into the keyspace
 - VALUES                      List all values stored into the keyspace
 - COUNT                       Return the number of key-value pair stored
@@ -40,8 +43,8 @@ as a basic message broker through commands PUB/SUB to publish messages to
 multiple subscriber, using a key as a topic.
 Shibui server expect an optional arg to set an arbitrary host to listen on port
 6373, otherwise localhost will be automatically set.
-Actually there's no client console so it can be tested using a generic tcp
-client like telnet or netcat.
+Actually there's a simple client console called shibui-cli but it can be tested
+using a generic tcp client like telnet or netcat.
 
 Out of the common commands like SET, GET or COUNT who everyone probably knows
 the behavior, TAIL key number is a command that allow a client to consume an
@@ -88,7 +91,9 @@ To build shibui-cli just make shibui-cli and run it like the following:
 * TODO
 =========================================
 
+- Refactoring
 - Persistence on disk, maybe through logging (started)
 - CLI to send commands and format output (started)
 - Additional commands (started)
 - Distribution system (fairly hard)
+- Write a good README

@@ -10,7 +10,7 @@
 /*
  * Return an empty hashmap, or NULL on failure.
  */
-map_t m_create() {
+map_t m_create(void) {
     h_map* m = (h_map*) malloc(sizeof(h_map));
     if(!m) return NULL;
 
@@ -55,19 +55,15 @@ static unsigned int hashmap_hash_int(h_map * m, char* keystring) {
  * to store the point to the item, or MAP_FULL.
  */
 static int hashmap_hash(map_t in, char* key) {
-    int i, curr;
-
+    int curr;
     /* Cast the hashmap */
     h_map* m = (h_map *) in;
-
     /* If full, return immediately */
     if (m->size >= (m->table_size / 2)) return MAP_FULL;
-
     /* Find the best index */
     curr = hashmap_hash_int(m, key);
-
     /* Linear probing */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++){
         if (m->data[curr].in_use == 0)
             return curr;
 
@@ -92,14 +88,14 @@ static int already_in(int *arr, int fd, int size) {
 }
 
 static int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
-    int i, curr;
+    int curr;
     h_map* m = (h_map *) in;
 
     /* Find data location */
     curr = hashmap_hash_int(m, key);
 
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++) {
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++) {
         int in_use = m->data[curr].in_use;
         if (in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
@@ -121,7 +117,7 @@ static int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
  * Doubles the size of the hashmap, and rehashes all the elements
  */
 static int hashmap_rehash(map_t in) {
-    int i, old_size;
+    int old_size;
     kv_pair* curr;
 
     /* Setup the new elements */
@@ -139,7 +135,7 @@ static int hashmap_rehash(map_t in) {
     m->size = 0;
 
     /* Rehash the elements */
-    for(i = 0; i < old_size; i++) {
+    for(int i = 0; i < old_size; i++) {
         int status;
 
         if (curr[i].in_use == 0)
@@ -163,9 +159,7 @@ static int hashmap_rehash(map_t in) {
             it = it->next;
         }
     }
-
     free(curr);
-
     return MAP_OK;
 }
 
@@ -174,11 +168,7 @@ static int hashmap_rehash(map_t in) {
  */
 int m_put(map_t in, char* key, any_t value) {
     int index;
-    h_map* m;
-
-    /* Cast the hashmap */
-    m = (h_map *) in;
-
+    h_map* m = (h_map *) in;
     /* Find a place to put our value */
     index = hashmap_hash(in, key);
     while(index == MAP_FULL){
@@ -187,7 +177,6 @@ int m_put(map_t in, char* key, any_t value) {
         }
         index = hashmap_hash(in, key);
     }
-
     /* Set the data */
     m->data[index].data = value;
     m->data[index].key = key;
@@ -210,11 +199,7 @@ int m_put(map_t in, char* key, any_t value) {
  */
 int m_pub(map_t in, char* key, any_t value) {
     int index;
-    h_map* m;
-
-    /* Cast the hashmap */
-    m = (h_map *) in;
-
+    h_map* m = (h_map *) in;
     /* Find a place to put our value */
     index = hashmap_hash(in, key);
     while(index == MAP_FULL){
@@ -223,7 +208,6 @@ int m_pub(map_t in, char* key, any_t value) {
         }
         index = hashmap_hash(in, key);
     }
-
     /* Set the data */
     m->data[index].data = value;
     m->data[index].key = key;
@@ -248,17 +232,12 @@ int m_pub(map_t in, char* key, any_t value) {
  * Get your pointer out of the hashmap with a key
  */
 int m_get(map_t in, char *key, any_t *arg) {
-    int i, curr;
-    h_map* m;
-
-    /* Cast the hashmap */
-    m = (h_map *) in;
-
+    int curr;
+    h_map* m = (h_map *) in;
     /* Find data location */
     curr = hashmap_hash_int(m, key);
-
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
         if (in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
@@ -266,12 +245,9 @@ int m_get(map_t in, char *key, any_t *arg) {
                 return MAP_OK;
             }
         }
-
         curr = (curr + 1) % m->table_size;
     }
-
     *arg = NULL;
-
     /* Not found */
     return MAP_MISSING;
 }
@@ -280,14 +256,12 @@ int m_get(map_t in, char *key, any_t *arg) {
  * Get key-value pair represented by key in the hashmap
  */
 int m_set_expire_time(map_t in, char *key, long expire_time) {
-    int i, curr;
+    int curr;
     h_map* m = (h_map *) in;
-
     /* Find data location */
     curr = hashmap_hash_int(m, key);
-
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
         if (in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
@@ -297,6 +271,7 @@ int m_set_expire_time(map_t in, char *key, long expire_time) {
                 } else {
                     m->data[curr].expire_time = expire_time;
                     m->data[curr].has_expire_time = 1;
+                    m->data[curr].creation_time = current_timestamp();
                 }
                 return MAP_OK;
             }
@@ -314,14 +289,11 @@ int m_set_expire_time(map_t in, char *key, long expire_time) {
  * socket to the array of subscribers of the pair identified by key.
  */
 int m_sub(map_t in, char *key, int fd) {
-    int i, curr, last;
-    h_map *m;
-
-    m = (h_map *) in;
-
+    int curr, last;
+    h_map *m = (h_map *) in;
     curr = hashmap_hash_int(m, key);
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
         if (in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
@@ -333,10 +305,8 @@ int m_sub(map_t in, char *key, int fd) {
                 return MAP_OK;
             }
         }
-
         curr = (curr + 1) % m->table_size;
     }
-
     /* Not found */
     return MAP_MISSING;
 }
@@ -346,14 +316,11 @@ int m_sub(map_t in, char *key, int fd) {
  * from the array of subscribers of the pair identified by keyspace
  */
 int m_unsub(map_t in, char *key, int fd) {
-    int i, curr, last;
-    h_map *m;
-
-    m = (h_map *) in;
-
+    int curr, last;
+    h_map *m = (h_map *) in;
     curr = hashmap_hash_int(m, key);
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
         if (in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
@@ -367,7 +334,6 @@ int m_unsub(map_t in, char *key, int fd) {
                 return MAP_OK;
             }
         }
-
         curr = (curr + 1) % m->table_size;
     }
 
@@ -381,14 +347,11 @@ int m_unsub(map_t in, char *key, int fd) {
  * start read the depletion.
  */
 int m_sub_from(map_t in, char *key, int fd, int index) {
-    int i, curr, last;
-    h_map *m;
-
-    m = (h_map *) in;
-
+    int curr, last;
+    h_map *m = (h_map *) in;
     curr = hashmap_hash_int(m, key);
     /* Linear probing, if necessary */
-    for(i = 0; i < MAX_CHAIN_LENGTH; i++){
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++){
         int in_use = m->data[curr].in_use;
         if (in_use == 1){
             if (strcmp(m->data[curr].key, key) == 0) {
@@ -411,10 +374,8 @@ int m_sub_from(map_t in, char *key, int fd, int index) {
                 return MAP_OK;
             }
         }
-
         curr = (curr + 1) % m->table_size;
     }
-
     /* Not found */
     return MAP_MISSING;
 }
@@ -483,17 +444,14 @@ int m_remove(map_t in, char* key) {
  * prefix.
  */
 int m_prefscan(map_t in, func f, any_t item, int fd) {
-    int i, flag = 0;
-
+    int flag = 0;
     /* Cast the hashmap */
     h_map* m = (h_map*) in;
-
     /* On empty hashmap, return immediately */
     if (m_length(m) <= 0)
         return MAP_MISSING;
-
     /* Linear probing */
-    for(i = 0; i < m->table_size; i++)
+    for(int i = 0; i < m->table_size; i++)
         if (m->data[i].in_use != 0) {
             kv_pair data = m->data[i];
             int status = f(item, data.key);
@@ -514,17 +472,14 @@ int m_prefscan(map_t in, func f, any_t item, int fd) {
  * fuzzy search.
  */
 int m_fuzzyscan(map_t in, func f, any_t item, int fd) {
-    int i, status, flag = 0;
-
+    int status, flag = 0;
     /* Cast the hashmap */
     h_map* m = (h_map*) in;
-
     /* On empty hashmap, return immediately */
     if (m_length(m) <= 0)
         return MAP_MISSING;
-
     /* Linear probing */
-    for(i = 0; i < m->table_size; i++)
+    for(int i = 0; i < m->table_size; i++)
         if (m->data[i].in_use != 0) {
             kv_pair data = m->data[i];
             status = f(item, data.key);

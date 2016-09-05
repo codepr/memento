@@ -69,6 +69,7 @@ static void trim(char *str) {
     str[i - begin] = '\0'; // Null terminate string.
 }
 
+/* Check every key expire time, if any is set */
 static int check_expire_time(any_t t1, any_t t2) {
     long current_ms = current_timestamp();
     h_map *m = (h_map *) t1;
@@ -76,18 +77,18 @@ static int check_expire_time(any_t t1, any_t t2) {
     if (m && kv) {
         if (kv->in_use == 1 && kv->has_expire_time != 0) {
             long delta = current_ms - kv->creation_time;
-            printf("%ld <=> %ld\n", delta, kv->expire_time);
             if (delta >= kv->expire_time) {
                 trim(kv->key);
-                int remove = m_remove(m, kv->key);
-                if (remove == MAP_MISSING)
-                    printf("MISSING\n");
+                m_remove(m, kv->key);
+                /* if (remove == MAP_MISSING) */
+                /* printf("MISSING\n"); */
             }
         }
     }
     return 1;
 }
 
+/* daemon to control all expire time of keys in the partitions */
 static void *expire_control_pthread(void *arg) {
     partition **buckets = (partition **) arg;
     if (buckets) {

@@ -16,7 +16,7 @@ typedef struct queue {
 
 typedef queue_node *iterator;
 
-queue *create_queue();
+queue *create_queue(void);
 void enqueue(queue *, void *);
 void *dequeue(queue *);
 void *peek(queue *);
