@@ -3,10 +3,10 @@ SHIBUI
 =========================================
 
 Fairly basic hashmap/message queue implementation built on top of an async TCP
-server to handle multiple clients connections featuring epoll, and consistent
-hashing data distribution. A toy project just for learning purpose, fascinated
-by the topic, i decided to try to make a simpler version of redis/memcached to
-better understand how it works.
+server to handle multiple clients connections featuring epoll, posix thread and
+consistent hashing data distribution. A toy project just for learning purpose,
+fascinated by the topic, i decided to try to make a simpler version of
+redis/memcached to better understand how it works.
 
 The project is a minimal redis-like implementation with a text based protocol,
 and like redis, can be used as key-value in-memory store, or a basic message
