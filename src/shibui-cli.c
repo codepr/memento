@@ -134,8 +134,13 @@ void help() {
     printf("UNSUB key key2 .. keyN      Unsubscribe from <key>..<keyN>\n");
     printf("PUB key value               Publish message <value> to <key> (analog to set\n");
     printf("                            but broadcasting to all subscribed members of key)\n");
+    printf("GETP key                    Get all information of a key-value pair represented by\n");
+    printf("                            <key>, like key, value, creation time and expire time\n");
     printf("APPEND key value            Append <value> to <key>\n");
     printf("PREPEND key value           Prepend <value> to <key>\n");
+    printf("EXPIRE key ms               Set an expire time in milliseconds after that the <key>\n");
+    printf("                            will be deleted, upon taking -1 as <ms> value the\n");
+    printf("                            expire time will be removed\n");
     printf("KEYS                        List all keys stored into the keyspace\n");
     printf("VALUES                      List all values stored into the keyspace\n");
     printf("COUNT                       Return the number of key-value pair stored\n");

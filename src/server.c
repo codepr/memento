@@ -479,6 +479,22 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
                 return 1;
             } else ret = MAP_MISSING;
         } else ret = MAP_MISSING;
+    } else if (strcasecmp(command, "GETP") == 0) {
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            kv_pair *kv = (kv_pair *) malloc(sizeof(kv_pair));
+            int get = m_get_kv_pair(buckets[p_index]->map, arg_1, kv);
+            if (get == MAP_OK && kv) {
+                char *kvstring = (char *) malloc(strlen(kv->key) + strlen((char *) kv->data) + (sizeof(long) * 2) + 40);
+                sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %ld\n",
+                        kv->key, (char *) kv->data, kv->creation_time, kv->expire_time);
+                send(sock_fd, kvstring, strlen(kvstring), 0);
+                free(kvstring);
+                return 1;
+            } else ret = MAP_MISSING;
+        } else ret = MAP_MISSING;
     } else if (strcasecmp(command, "DEL") == 0) {
         arg_1 = strtok(NULL, " ");
         while (arg_1 != NULL) {

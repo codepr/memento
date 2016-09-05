@@ -87,32 +87,6 @@ static int already_in(int *arr, int fd, int size) {
     return -1;
 }
 
-static int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
-    int curr;
-    h_map* m = (h_map *) in;
-
-    /* Find data location */
-    curr = hashmap_hash_int(m, key);
-
-    /* Linear probing, if necessary */
-    for(int i = 0; i < MAX_CHAIN_LENGTH; i++) {
-        int in_use = m->data[curr].in_use;
-        if (in_use == 1) {
-            if (strcmp(m->data[curr].key, key) == 0) {
-                *arg = m->data[curr];
-                return MAP_OK;
-            }
-        }
-
-        curr = (curr + 1) % m->table_size;
-    }
-
-    arg = NULL;
-
-    /* Not found */
-    return MAP_MISSING;
-}
-
 /*
  * Doubles the size of the hashmap, and rehashes all the elements
  */
@@ -248,6 +222,35 @@ int m_get(map_t in, char *key, any_t *arg) {
         curr = (curr + 1) % m->table_size;
     }
     *arg = NULL;
+    /* Not found */
+    return MAP_MISSING;
+}
+
+/*
+ * Return the key-value pair represented by a key in the map
+ */
+int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
+    int curr;
+    h_map* m = (h_map *) in;
+
+    /* Find data location */
+    curr = hashmap_hash_int(m, key);
+
+    /* Linear probing, if necessary */
+    for(int i = 0; i < MAX_CHAIN_LENGTH; i++) {
+        int in_use = m->data[curr].in_use;
+        if (in_use == 1) {
+            if (strcmp(m->data[curr].key, key) == 0) {
+                *arg = m->data[curr];
+                return MAP_OK;
+            }
+        }
+
+        curr = (curr + 1) % m->table_size;
+    }
+
+    arg = NULL;
+
     /* Not found */
     return MAP_MISSING;
 }

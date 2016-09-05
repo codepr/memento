@@ -5,6 +5,7 @@
 
 - Added new command EXPIRE, set a timer in milliseconds to a key after that the key and his value
   is wiped
+- Added new comand GETP, return infos of a key-value pair
 - Improved shibui-cli, printing help and correctly handling SUB and TAIL command
 
 2016-08-31

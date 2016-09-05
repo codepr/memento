@@ -4,10 +4,14 @@ SHIBUI
 
 Fairly basic hashmap/message queue implementation built on top of an async TCP
 server to handle multiple clients connections featuring epoll, and consistent
-hashing data distribution, a toy project just for learning purpose.
+hashing data distribution. A toy project just for learning purpose, fascinated
+by the topic, i decided to try to make a simpler version of redis/memcached to
+better understand how it works.
 
 The project is a minimal redis-like implementation with a text based protocol,
-currently supports some basic operations:
+and like redis, can be used as key-value in-memory store, or a basic message
+broker using keys as topic to subscribe to.
+Currently supports some basic operations:
 
 - SET key value               Sets <key> to <value>
 - GET key                     Get the value identified by <key>
@@ -20,6 +24,8 @@ currently supports some basic operations:
 - UNSUB key key2 .. keyN      Unsubscribe from <key>..<keyN>
 - PUB key value               Publish message <value> to <key> (analog to set
                               but broadcasting to all subscribed members of key)
+- GETP key                    Get all information of a key-value pair represented by
+                              <key>, like key, value, creation time and expire time
 - APPEND key value            Append <value> to <key>
 - PREPEND key value           Prepend <value> to <key>
 - EXPIRE key ms               Set an expire time in milliseconds after that the <key>
@@ -53,17 +59,20 @@ with number as the offset for the depletion. 0 means from the start of the
 publication, increasing number discard the same quantity of messages starting
 from the oldest going to younger. E.g:
 
+# Client 0:
 pub topic_key i am
 pub topic_key a stream
 pub topic_key of useless
 pub topic_key messages
 
+# Client 1:
 tail topic_key 0 ->
 i am
 a stream
 of useless
 messages
 
+# Client 2:
 tail topic_key 2 ->
 of useless
 messages
