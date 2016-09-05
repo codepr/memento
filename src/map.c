@@ -248,9 +248,7 @@ int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
 
         curr = (curr + 1) % m->table_size;
     }
-
     arg = NULL;
-
     /* Not found */
     return MAP_MISSING;
 }

@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=gnu99 -Wall -lrt -lpthread
+CFLAGS=-std=gnu99 -Wall -lrt -lpthread -Wpedantic
 SRC=src/main.c src/map.c src/server.c src/queue.c src/partition.c src/util.c
 
 shibui: $(SRC)
