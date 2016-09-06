@@ -23,7 +23,6 @@
 #define EXPIRATION_CHECK_INTERVAL 3 // check every 3s
 
 static unsigned int is_checking = 0;
-static pthread_t t;
 
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
@@ -245,6 +244,7 @@ void start_server(const char *host, const char* port) {
     // partition buckets, every bucket can contain a variable number of
     // key-value pair
     partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
+    static pthread_t t;
     for (int i = 0; i < PARTITION_NUMBER; i++)
         buckets[i] = create_partition();
     // initialize log for persistence
