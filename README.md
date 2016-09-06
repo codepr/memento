@@ -11,7 +11,7 @@ The project is a minimal redis-like implementation with a text based protocol,
 and like redis, can be used as key-value in-memory store, or a basic message
 broker using keys as topic to subscribe to.
 
-![sample](https://github.com/codepr/shibui/tree/master/samples/sample.png)
+![sample](https://github.com/codepr/shibui/blob/master/samples/sample.png)
 
 ### Commands
 
@@ -51,7 +51,7 @@ with number as the offset for the depletion. 0 means from the start of the
 publication, increasing number discard the same quantity of messages starting
 from the oldest going to younger. E.g:
 
-![pubtail](https://github.com/codepr/shibui/tree/master/samples/pubtail.png)
+![pubtail](https://github.com/codepr/shibui/blob/master/samples/pubtail.png)
 
 All subsequent messages published to the key topic will be normally dispatched
 like a normal SUB command.
