@@ -22,7 +22,7 @@ broker using keys as topic to subscribe to.
 - **DEC** key qty                 Decrement by `<qty>` the value idenfied by `<key>`, if no `<qty>` is specified decrement by 1
 - **SUB** key key2 .. keyN        Subscribe to `<key>..<keyN>`, receiving messages published
 - **UNSUB** key key2 .. keyN      Unsubscribe from `<key>..<keyN>`
-- **PUB** key value               Publish message `<value>` to `<key>` (analog to SET but broadcasting to all subscribed members of `<key>`)
+- **PUB** key value               Publish message `<value>` to `<key>` (analog to **SET** but broadcasting to all subscribed members of `<key>`)
 - **GETP** key                    Get all information of a key-value pair represented by `<key>`, like key, value, creation time and expire time
 - **APPEND** key value            Append `<value>` to `<key>`
 - **PREPEND** key value           Prepend `<value>` to `<key>`
