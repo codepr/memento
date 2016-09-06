@@ -1,6 +1,5 @@
 
-SHIBUI
-=========================================
+# SHIBUI
 
 Fairly basic hashmap/message queue implementation built on top of an async TCP
 server to handle multiple clients connections featuring epoll, posix thread and
@@ -11,36 +10,29 @@ redis/memcached to better understand how it works.
 The project is a minimal redis-like implementation with a text based protocol,
 and like redis, can be used as key-value in-memory store, or a basic message
 broker using keys as topic to subscribe to.
-Currently supports some basic operations:
 
-- SET key value               Sets <key> to <value>
-- GET key                     Get the value identified by <key>
-- DEL key key2 .. keyN        Delete values identified by <key>..<keyN>
-- INC key qty                 Increment by <qty> the value idenfied by <key>, if
-                              no <qty> is specified increment by 1
-- DEC key qty                 Decrement by <qty> the value idenfied by <key>, if
-                              no <qty> is specified decrement by 1
-- SUB key key2 .. keyN        Subscribe to <key>..<keyN>, receiving messages published
-- UNSUB key key2 .. keyN      Unsubscribe from <key>..<keyN>
-- PUB key value               Publish message <value> to <key> (analog to set
-                              but broadcasting to all subscribed members of key)
-- GETP key                    Get all information of a key-value pair represented by
-                              <key>, like key, value, creation time and expire time
-- APPEND key value            Append <value> to <key>
-- PREPEND key value           Prepend <value> to <key>
-- EXPIRE key ms               Set an expire time in milliseconds after that the <key>
-                              will be deleted, upon taking -1 as <ms> value the
-                              expire time will be removed
+![sample](https://github.com/codepr/shibui/tree/master/samples/sample.png)
+
+### Commands
+
+- SET key value               Sets `<key>` to `<value>`
+- GET key                     Get the value identified by `<key>`
+- DEL key key2 .. keyN        Delete values identified by `<key>..<keyN>`
+- INC key qty                 Increment by <qty> the value idenfied by `<key>`, if no `<qty>` is specified increment by 1
+- DEC key qty                 Decrement by `<qty>` the value idenfied by `<key>`, if no `<qty>` is specified decrement by 1
+- SUB key key2 .. keyN        Subscribe to `<key>..<keyN>`, receiving messages published
+- UNSUB key key2 .. keyN      Unsubscribe from `<key>..<keyN>`
+- PUB key value               Publish message `<value>` to `<key>` (analog to SET but broadcasting to all subscribed members of `<key>`)
+- GETP key                    Get all information of a key-value pair represented by `<key>`, like key, value, creation time and expire time
+- APPEND key value            Append `<value>` to `<key>`
+- PREPEND key value           Prepend `<value>` to `<key>`
+- EXPIRE key ms               Set an expire time in milliseconds after that the `<key>` will be deleted, upon taking -1 as `<ms>` value the expire time will be removed
 - KEYS                        List all keys stored into the keyspace
 - VALUES                      List all values stored into the keyspace
 - COUNT                       Return the number of key-value pair stored
-- TAIL key offset             Like SUB, but with an <offset> representing how
-                              many messages discard starting from 0 (the very
-                              first chronologically)
-- PREFSCAN key_prefix         Scan the keyspace finding all values associated to
-                              keys matching <key_prefix> as prefix
-- FUZZYSCAN pattern           Scan the keyspace finding all values associated to
-                              keys matching <pattern> in a fuzzy search way
+- TAIL key offset             Like SUB, but with an `<offset>` representing how many messages discard starting from 0 (the very first chronologically)
+- PREFSCAN key_prefix         Scan the keyspace finding all values associated to keys matching `<key_prefix>` as prefix
+- FUZZYSCAN pattern           Scan the keyspace finding all values associated to keys matching `<pattern>` in a fuzzy search way
 - FLUSH                       Delete all maps stored inside partitions
 - QUIT/EXIT                   Close connection
 
@@ -59,23 +51,7 @@ with number as the offset for the depletion. 0 means from the start of the
 publication, increasing number discard the same quantity of messages starting
 from the oldest going to younger. E.g:
 
-# Client 0:
-pub topic_key i am
-pub topic_key a stream
-pub topic_key of useless
-pub topic_key messages
-
-# Client 1:
-tail topic_key 0 ->
-i am
-a stream
-of useless
-messages
-
-# Client 2:
-tail topic_key 2 ->
-of useless
-messages
+![pubtail](https://github.com/codepr/shibui/tree/master/samples/pubtail.png)
 
 All subsequent messages published to the key topic will be normally dispatched
 like a normal SUB command.
@@ -84,21 +60,19 @@ Actually the keyspace is distributed across 1024 partitions based on consistent
 hashing of the keys, this way should be simplier to eventually distribute data
 across multiple nodes.
 
-* BUILD
-=========================================
+### Build
 
 To build the source just run make. A shibui executable will be generated that
 can be started to listen on localhost:6737, ready to receive commands from any
 TCP client
-
+```sh
     $ ./shibui <hostname>
-
+```
 To build shibui-cli just make shibui-cli and run it like the following:
-
+```sh
     $ ./shibui-cli <hostname> <port>
-
-* TODO
-=========================================
+```
+### TODO
 
 - Refactoring
 - Persistence on disk, maybe through logging (started)
