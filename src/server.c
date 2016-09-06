@@ -725,14 +725,24 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             strcpy(arg_2_holder, arg_2);
             int p_index = partition_hash(arg_1_holder);
             ret = m_set_expire_time(buckets[p_index]->map, arg_1_holder, (long) to_int(arg_2_holder));
-            /* if (ret == MAP_OK) { */
-            /*     if (is_checking == 0) { */
-            /*         if (pthread_create(&t, NULL, &expire_control_pthread, buckets) != 0) */
-            /*             perror("ERROR pthread"); */
-            /*         is_checking = 1; */
-            /*     } */
-            /* } */
+
         } else return MAP_MISSING;
+    } else if (strcasecmp(command, "TTL") == 0) {
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            kv_pair *kv = (kv_pair *) malloc(sizeof(kv_pair));
+            int get = m_get_kv_pair(buckets[p_index]->map, arg_1, kv);
+            if (get == MAP_OK && kv) {
+                char ttl[7];
+                if (kv->has_expire_time)
+                    sprintf(ttl, "%ld\n", kv->expire_time / 1000);
+                else
+                    sprintf(ttl, "%d\n", -1);
+                send(sock_fd, ttl, 7, 0);
+            }
+        }
     } else if (strcasecmp(command, "FLUSH") == 0) {
         for (int i = 0; i < PARTITION_NUMBER; i++) {
             partition_release(buckets[i]);

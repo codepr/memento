@@ -2,8 +2,10 @@
 =========================================
 
 2016-09-06
-- Added new command INCF and DECF, respectively increment/decrement by float quantity
+
+- Added new commands INCF and DECF, respectively increment/decrement by float quantity
   the float value represented by key specified
+- Added new command TTL, returning the time to live of a specified key
 - Minor fixes
 
 2016-09-05

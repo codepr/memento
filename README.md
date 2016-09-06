@@ -29,6 +29,7 @@ broker using keys as topic to subscribe to.
 - **APPEND** key value            Append `<value>` to `<key>`
 - **PREPEND** key value           Prepend `<value>` to `<key>`
 - **EXPIRE** key ms               Set an expire time in milliseconds after that the `<key>` will be deleted, upon taking -1 as `<ms>` value the expire time will be removed
+- **TTL** key Return the Time-To-Live of the `<key>` in seconds
 - **KEYS**                        List all keys stored into the keyspace
 - **VALUES**                      List all values stored into the keyspace
 - **COUNT**                       Return the number of key-value pair stored
