@@ -18,8 +18,10 @@ broker using keys as topic to subscribe to.
 - **SET** key value Sets `<key>` to `<value>`
 - **GET** key Get the value identified by `<key>`
 - **DEL** key key2 .. keyN Delete values identified by `<key>..<keyN>`
-- **INC** key qty                 Increment by <qty> the value idenfied by `<key>`, if no `<qty>` is specified increment by 1
+- **INC** key qty                 Increment by `<qty>` the value idenfied by `<key>`, if no `<qty>` is specified increment by 1
 - **DEC** key qty                 Decrement by `<qty>` the value idenfied by `<key>`, if no `<qty>` is specified decrement by 1
+- **INCF** key qty Increment by float `<qty>` the value identified by `<key>`, if no `<qty>` is specified increment by 1.0
+- **DECF** key qty Decrement by `<qty>` the value identified by `<key>`, if no `<qty>` is specified decrement by 1.0
 - **SUB** key key2 .. keyN        Subscribe to `<key>..<keyN>`, receiving messages published
 - **UNSUB** key key2 .. keyN      Unsubscribe from `<key>..<keyN>`
 - **PUB** key value               Publish message `<value>` to `<key>` (analog to **SET** but broadcasting to all subscribed members of `<key>`)
@@ -66,7 +68,7 @@ To build the source just run make. A shibui executable will be generated that
 can be started to listen on localhost:6737, ready to receive commands from any
 TCP client
 ```sh
-    $ ./shibui <hostname>
+    $ ./shibui <hostname> <port>
 ```
 To build shibui-cli just make shibui-cli and run it like the following:
 ```sh

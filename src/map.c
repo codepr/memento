@@ -165,6 +165,9 @@ int m_put(map_t in, char* key, any_t value) {
         m->data[index].data_history = create_queue();
     }
 
+    printf("k: %s\n", m->data[index].key);
+    printf("v: %s\n", (char *) m->data[index].data);
+
     return MAP_OK;
 }
 
@@ -212,8 +215,7 @@ int m_get(map_t in, char *key, any_t *arg) {
     curr = hashmap_hash_int(m, key);
     /* Linear probing, if necessary */
     for(int i = 0; i < MAX_CHAIN_LENGTH; i++){
-        int in_use = m->data[curr].in_use;
-        if (in_use == 1) {
+        if (m->data[curr].in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
                 *arg = (m->data[curr].data);
                 return MAP_OK;
@@ -238,8 +240,7 @@ int m_get_kv_pair(map_t in, char *key, kv_pair *arg) {
 
     /* Linear probing, if necessary */
     for(int i = 0; i < MAX_CHAIN_LENGTH; i++) {
-        int in_use = m->data[curr].in_use;
-        if (in_use == 1) {
+        if (m->data[curr].in_use == 1) {
             if (strcmp(m->data[curr].key, key) == 0) {
                 *arg = m->data[curr];
                 return MAP_OK;

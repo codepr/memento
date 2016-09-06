@@ -98,11 +98,13 @@ void command_loop(int fd, char *hostname, char *port) {
                     perror("ERROR writing to socket");
                 /* print the server's reply */
                 bzero(buf, CMD_BUFSIZE);
-                status = read(fd, buf, CMD_BUFSIZE);
+                while (status > 0) {
+                    status = read(fd, buf, CMD_BUFSIZE);
+                    if (status < 0)
+                        perror("ERROR reading from socket");
+                    printf("%s", buf);
+                }
             }
-            if (status < 0)
-                perror("ERROR reading from socket");
-            printf("%s", buf);
             free(line);
         }
     }

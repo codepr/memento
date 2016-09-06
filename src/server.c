@@ -121,13 +121,20 @@ static void remove_newline(char *str) {
 }
 
 /* auxiliary function to convert integer contained inside string into int */
-static int to_int(char *p) {
+static int to_int(char *s) {
     int len = 0;
-    while(isdigit(*p)) {
-        len = (len * 10) + (*p - '0');
-        p++;
+    while(isdigit(*s)) {
+        len = (len * 10) + (*s - '0');
+        s++;
     }
     return len;
+}
+
+/* auxiliary function to convert double contained inside a string int a double */
+static double to_double(char *s) {
+    double dnum;
+    if (sscanf(s, "%lf", &dnum) == 1) return dnum;
+    return 0.0;
 }
 
 /* callback function to match a given pattern by fuzzy searching it */
@@ -424,7 +431,6 @@ void start_server(const char *host, const char* port) {
     }
 
     /* release all partitions */
-    /* m_release(hashmap); */
     for (int i = 0; i < PARTITION_NUMBER; i++)
         partition_release(buckets[i]);
     free(events);
@@ -434,9 +440,16 @@ void start_server(const char *host, const char* port) {
 }
 
 /* auxiliary function to check wether a string is an integer */
-static int is_number(char *s) {
+static int is_integer(char *s) {
     int num;
-    if(sscanf(s, "%d", &num) == 0) return 0;
+    if (sscanf(s, "%d", &num) == 0) return 0;
+    return 1;
+}
+
+/* auxiliary function to check wether a string is a floating number */
+static int is_float(char *s) {
+    double dnum;
+    if (sscanf(s, "%lf", &dnum) == 0) return 0;
     return 1;
 }
 
@@ -544,14 +557,31 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
             if (ret == MAP_OK && arg_2) {
                 char *s = (char *) arg_2;
-                if (is_number(s) == 1) {
+                if (is_integer(s) == 1) {
                     int v = to_int(s);
                     char *by = strtok(NULL, " ");
-                    if (by != NULL && is_number(by)) {
+                    if (by && is_integer(by)) {
                         v += to_int(by);
                     } else v++;
                     sprintf(arg_2, "%d\n", v);
-                    ret = m_put(buckets[p_index]->map, arg_1, arg_2);
+                } else return MAP_MISSING;
+            } else return ret;
+        } else return MAP_MISSING;
+    } else if (strcasecmp(command, "INCF") == 0) {
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+            if (ret == MAP_OK && arg_2) {
+                char *s = (char *) arg_2;
+                if (is_float(s) == 1) {
+                    double v = to_double(s);
+                    char *by = strtok(NULL, " ");
+                    if (by && is_float(by)) {
+                        v += to_double(by);
+                    } else v += 1.0;
+                    sprintf(arg_2, "%lf\n", v);
                 } else return MAP_MISSING;
             } else return ret;
         } else return MAP_MISSING;
@@ -563,14 +593,31 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
             if (ret == MAP_OK && arg_2) {
                 char *s = (char *) arg_2;
-                if(is_number(s) == 1) {
+                if(is_integer(s) == 1) {
                     int v = to_int(s);
                     char *by = strtok(NULL, " ");
-                    if (by != NULL && is_number(by)) {
+                    if (by != NULL && is_integer(by)) {
                         v -= to_int(by);
                     } else v--;
                     sprintf(arg_2, "%d\n", v);
-                    ret = m_put(buckets[p_index]->map, arg_1, arg_2);
+                } else return MAP_MISSING;
+            } else return ret;
+        } else return MAP_MISSING;
+    } else if (strcasecmp(command, "DECF") == 0) {
+        arg_1 = strtok(NULL, " ");
+        if (arg_1) {
+            trim(arg_1);
+            int p_index = partition_hash(arg_1);
+            ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+            if (ret == MAP_OK && arg_2) {
+                char *s = (char *) arg_2;
+                if(is_float(s) == 1) {
+                    double v = to_double(s);
+                    char *by = strtok(NULL, " ");
+                    if (by != NULL && is_integer(by)) {
+                        v -= to_double(by);
+                    } else v -= 1.0;
+                    sprintf(arg_2, "%lf\n", v);
                 } else return MAP_MISSING;
             } else return ret;
         } else return MAP_MISSING;
@@ -600,7 +647,7 @@ int process_command(partition **buckets, char *buffer, int sock_fd) {
             char *arg_2_holder = malloc(strlen((char *) arg_2));
             strcpy(arg_1_holder, arg_1);
             strcpy(arg_2_holder, arg_2);
-            if (is_number(arg_2_holder)) {
+            if (is_integer(arg_2_holder)) {
                 int i = to_int(arg_2_holder);
                 int p_index = partition_hash(arg_1_holder);
                 m_sub_from(buckets[p_index]->map, arg_1, sock_fd, i);
