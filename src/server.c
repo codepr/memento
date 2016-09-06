@@ -80,8 +80,6 @@ static int check_expire_time(any_t t1, any_t t2) {
             if (delta >= kv->expire_time) {
                 trim(kv->key);
                 m_remove(m, kv->key);
-                /* if (remove == MAP_MISSING) */
-                /* printf("MISSING\n"); */
             }
         }
     }
@@ -161,8 +159,11 @@ static int find_fuzzy_pattern(any_t t1, any_t t2) {
 static int print_keys(any_t t1, any_t t2) {
     kv_pair *kv = (kv_pair *) t2;
     int *fd = (int *) t1;
-
-    send(*fd, kv->key, strlen(kv->key), 0);
+    char *stringkey = (char *) malloc(strlen(kv->key) + 1);
+    bzero(stringkey, strlen(stringkey));
+    strcpy(stringkey, kv->key);
+    char *key_nl = append_string(stringkey, "\n");
+    send(*fd, key_nl, strlen(key_nl), 0);
     return MAP_OK;
 }
 
@@ -392,7 +393,7 @@ void start_server(const char *host, const char* port) {
                         break;
                     }
 
-                    printf("Command: %s\n", buf);
+                    /* printf("Command: %s\n", buf); */
                     int proc = process_command(buckets, buf, events[i].data.fd);
                     switch(proc) {
                     case MAP_OK:

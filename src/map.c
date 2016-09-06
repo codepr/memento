@@ -165,9 +165,6 @@ int m_put(map_t in, char* key, any_t value) {
         m->data[index].data_history = create_queue();
     }
 
-    printf("k: %s\n", m->data[index].key);
-    printf("v: %s\n", (char *) m->data[index].data);
-
     return MAP_OK;
 }
 

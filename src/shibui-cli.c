@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <fcntl.h>
 
 #define CMD_BUFSIZE 1024
 #define VERSION "0.0.1"
@@ -54,6 +55,8 @@ int main(int argc, char **argv) {
         exit(0);
     }
 
+    /* fcntl(sock_fd, F_SETFL, O_NONBLOCK); */
+
     char c_port[4];
     sprintf(c_port, "%d", port);
     banner();
@@ -70,6 +73,10 @@ void command_loop(int fd, char *hostname, char *port) {
     while (status) {
         printf("%s:%s> ", hostname, port);
         line = read_command();
+        char supp_command[strlen(line)];
+        bzero(supp_command, strlen(line));
+        strcpy(supp_command, line);
+        char *comm = strtok(supp_command, " ");
         if (strlen(line) > 1) {
             char token[4];
             strncpy(token, line, 4);
@@ -85,6 +92,19 @@ void command_loop(int fd, char *hostname, char *port) {
                     if (strncasecmp(buf, "NOT FOUND", 9) == 0) break;
                     printf("%s", buf);
                 }
+            } else if (strncasecmp(comm, "KEYS", 4) == 0 ||
+                       strncasecmp(comm, "VALUES", 6) == 0 ||
+                       strncasecmp(comm, "PREFSCAN", 8) == 0 ||
+                       strncasecmp(comm, "FUZZYSCAN", 9) == 0) {
+                fcntl(fd, F_SETFL, O_NONBLOCK);
+                status = write(fd, line, strlen(line));
+                usleep(100000);
+                if (status < 0)
+                    perror("ERROR writing to socket");
+                while(read(fd, buf, CMD_BUFSIZE) > 0) {
+                    printf("%s", buf);
+                    bzero(buf, CMD_BUFSIZE);
+                }
             } else if (token[0] == '?' ||
                        token[0] == 'h' ||
                        token[0] == 'H' ||
@@ -98,12 +118,10 @@ void command_loop(int fd, char *hostname, char *port) {
                     perror("ERROR writing to socket");
                 /* print the server's reply */
                 bzero(buf, CMD_BUFSIZE);
-                while (status > 0) {
-                    status = read(fd, buf, CMD_BUFSIZE);
-                    if (status < 0)
-                        perror("ERROR reading from socket");
-                    printf("%s", buf);
-                }
+                status = read(fd, buf, CMD_BUFSIZE);
+                if (status < 0)
+                    perror("ERROR reading from socket");
+                printf("%s", buf);
             }
             free(line);
         }
@@ -132,6 +150,10 @@ void help() {
     printf("                            no <qty> is specified increment by 1\n");
     printf("DEC key qty                 Decrement by <qty> the value idenfied by <key>, if\n");
     printf("                            no <qty> is specified decrement by 1\n");
+    printf("INCF                        key qty Increment by float <qty> the value identified\n");
+    printf("                            by <key>, if no <qty> is specified increment by 1.0\n");
+    printf("DECF                        key qty Decrement by <qty> the value identified by <key>,\n");
+    printf("                            if no <qty> is specified decrement by 1.0\n");
     printf("SUB key key2 .. keyN        Subscribe to <key>..<keyN>, receiving messages published\n");
     printf("UNSUB key key2 .. keyN      Unsubscribe from <key>..<keyN>\n");
     printf("PUB key value               Publish message <value> to <key> (analog to set\n");
