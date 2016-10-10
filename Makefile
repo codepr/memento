@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=gnu99 -Wall -lrt -lpthread
-SRC=src/main.c src/map.c src/server.c src/queue.c src/partition.c src/util.c
+SRC=src/main.c src/map.c src/server.c src/queue.c src/partition.c src/util.c src/commands.c src/persistence.c
 
 shibui: $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o shibui

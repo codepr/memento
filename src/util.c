@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <ctype.h>
+#include <string.h>
 #include <sys/time.h>
 #include "util.h"
 
@@ -121,4 +123,56 @@ long long current_timestamp(void) {
     gettimeofday(&te, NULL);
     long long ms = te.tv_sec * 1000LL + te.tv_usec / 1000;
     return ms;
+}
+
+/*
+ * trim string, removing leading and trailing spaces
+ */
+void trim(char *str) {
+    int i;
+    int begin = 0;
+    int end = strlen(str) - 1;
+
+    while (isspace(str[begin]))
+        begin++;
+
+    while ((end >= begin) && isspace(str[end]))
+        end--;
+
+    // Shift all characters back to the start of the string array.
+    for (i = begin; i <= end; i++)
+        str[i - begin] = str[i];
+
+    str[i - begin] = '\0'; // Null terminate string.
+}
+
+/* auxiliary function to check wether a string is an integer */
+int is_integer(char *s) {
+    int num;
+    if (sscanf(s, "%d", &num) == 0) return 0;
+    return 1;
+}
+
+/* auxiliary function to check wether a string is a floating number */
+int is_float(char *s) {
+    double dnum;
+    if (sscanf(s, "%lf", &dnum) == 0) return 0;
+    return 1;
+}
+
+/* auxiliary function to convert integer contained inside string into int */
+int to_int(char *s) {
+    int len = 0;
+    while(isdigit(*s)) {
+        len = (len * 10) + (*s - '0');
+        s++;
+    }
+    return len;
+}
+
+/* auxiliary function to convert double contained inside a string int a double */
+double to_double(char *s) {
+    double dnum;
+    if (sscanf(s, "%lf", &dnum) == 1) return dnum;
+    return 0.0;
 }

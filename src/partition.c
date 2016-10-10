@@ -5,6 +5,8 @@
 partition *create_partition(void) {
     partition *p = (partition *) malloc(sizeof(partition));
     p->map = m_create();
+    p->lower_bound = 0;
+    p->upper_bound = PARTITION_NUMBER;
     return p;
 }
 
