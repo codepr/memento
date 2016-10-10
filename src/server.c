@@ -123,30 +123,32 @@ static int create_and_bind(const char *host, const char *port) {
 static int process_command(partition **buckets, char *buffer, int sock_fd) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
+    // in case of empty command return nothing, next additions will be awaiting
+    // for incoming chunks
     if (!command)
         return 1;
-
+    // in case of 'QUIT' or 'EXIT' close the connection
     if (strcasecmp(command, "quit") == 0 || strcasecmp(command, "exit") == 0)
         return END;
-
+    // check if the buffer contains a command and execute it
     for(int i = 0; i < commands_array_len(); i++) {
         if(strcasecmp(command, commands[i]) == 0) {
             return (*cmds_func[i])(buckets, buffer + strlen(command) + 1);
         }
     }
-
+    // check if the buffer contains a query and execute it
     for(int i = 0; i < queries_array_len(); i++) {
         if(strcasecmp(command, queries[i]) == 0) {
             return (*qrs_func[i])(buckets, buffer + strlen(command) + 1, sock_fd);
         }
     }
-
+    // check if the buffer contains an enumeration command and execute it
     for(int i = 0; i < enumerates_array_len(); i++) {
         if(strcasecmp(command, enumerates[i]) == 0) {
             return (*enum_func[i])(buckets, sock_fd);
         }
     }
-
+    // check if the buffer contains a service command and execute it
     for(int i = 0; i < services_array_len(); i++) {
         if(strcasecmp(command, services[i]) == 0) {
             return (*srvs_func[i])(buckets);

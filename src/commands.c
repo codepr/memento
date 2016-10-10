@@ -128,6 +128,10 @@ static int print_values(any_t t1, any_t t2) {
     return MAP_OK;
 }
 
+/* SET command handler, calculate in which position of the array of the
+ * partitions the key-value pair must be stored using CRC32, overwriting in case
+ * of a already taken position
+ */
 int set_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -146,6 +150,11 @@ int set_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * GET command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32, write back the value associated to
+ * it if present, MISSING reply code otherwise
+ */
 int get_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -163,6 +172,12 @@ int get_command(partition **buckets, char *command, int sock_fd) {
     return ret;
 }
 
+/*
+ * GETP command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32, write back all the informations
+ * associated to the key-value pair if present, including expire time and
+ * creation time, MISSING reply code otherwise
+ */
 int getp_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -184,6 +199,11 @@ int getp_command(partition **buckets, char *command, int sock_fd) {
     return ret;
 }
 
+/*
+ * DEL command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and delete it if present, return
+ * MISSING reply code otherwise
+ */
 int del_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -197,6 +217,11 @@ int del_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * SUB command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and subscribe the file descriptor to
+ * it if present, return MISSING reply code otherwise
+ */
 int sub_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -210,6 +235,11 @@ int sub_command(partition **buckets, char *command, int sock_fd) {
     return ret;
 }
 
+/*
+ * UNSUB command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and unsubscribe the file descriptor
+ * to it if present, return MISSING reply code otherwise
+ */
 int unsub_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -223,6 +253,13 @@ int unsub_command(partition **buckets, char *command, int sock_fd) {
     return ret;
 }
 
+/*
+ * PUB command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and publish (e.g. SET) a new value
+ * to it if present, return MISSING reply code otherwise.
+ * All subscribed file descriptor will receive the value as a message
+ * themselves.
+ */
 int pub_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -240,6 +277,11 @@ int pub_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * INC command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and increment (add 1) to the integer
+ * value to it if present, return MISSING reply code otherwise.
+ */
 int inc_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -264,6 +306,11 @@ int inc_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * INCF command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and increment (add 1.00) to the
+ * float value to it if present, return MISSING reply code otherwise.
+ */
 int incf_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -288,6 +335,11 @@ int incf_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * DEC command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and decrement (subtract 1) to the
+ * integer value to it if present, return MISSING reply code otherwise.
+ */
 int dec_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -312,6 +364,11 @@ int dec_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * DECF command handler, calculate in which position of the array of the
+ * partitions the key is stored using CRC32 and decrement (subtract 1.00) to the
+ * foat value to it if present, return MISSING reply code otherwise.
+ */
 int decf_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -336,6 +393,10 @@ int decf_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * COUNT command handler, count all key-value pairs stored in the hashmap and
+ * write the result back to the file-descriptor
+ */
 int count_command(partition **buckets, int sock_fd) {
     int len = 0;
     for (int i = 0; i < PARTITION_NUMBER; i++)
@@ -346,6 +407,10 @@ int count_command(partition **buckets, int sock_fd) {
     return 1;
 }
 
+/*
+ * KEYS command handler, iterate through all the keyspace and return a list of
+ * the present keys.
+ */
 int key_command(partition **buckets, int sock_fd) {
     for (int i = 0; i < PARTITION_NUMBER; i++)
         if (buckets[i]->map->size > 0)
@@ -353,6 +418,10 @@ int key_command(partition **buckets, int sock_fd) {
     return 1;
 }
 
+/*
+ * VALUES command handler, iterate through all the keyspace and return a list of
+ * the present values associated to them.
+ */
 int values_command(partition **buckets, int sock_fd) {
     for (int i = 0; i < PARTITION_NUMBER; i++)
         if (buckets[i]->map->size > 0)
@@ -360,6 +429,11 @@ int values_command(partition **buckets, int sock_fd) {
     return 1;
 }
 
+/*
+ * TAIL command handler, works like SUB but using an index as a cursor on the
+ * queue of the previous published values associated to a key, it allow to
+ * iterate through the full history of the pubblications at will.
+ */
 int tail_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -381,6 +455,11 @@ int tail_command(partition **buckets, char *command, int sock_fd) {
     return ret;
 }
 
+/*
+ * PREFSCAN command handler, scans the entire keyspace and build a list with all
+ * the keys that match the prefix passed directly writing it back to the
+ * file-descriptor
+ */
 int prefscan_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -399,6 +478,11 @@ int prefscan_command(partition **buckets, char *command, int sock_fd) {
     return ret;
 }
 
+/*
+ * FUZZYSCAN command handler, scans the entire keyspace and build a list with
+ * all the keys that match the prefix according to a basic fuzzy-search
+ * algorithm passed directly writing it back to the file-descriptor
+ */
 int fuzzyscan_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -417,6 +501,11 @@ int fuzzyscan_command(partition **buckets, char *command, int sock_fd) {
     return ret;
 }
 
+/*
+ * APPEND command handler, finds the partition inside the partitions array using
+ * CRC32 and append a suffix to the value associated to the found key, returning
+ * MISSING reply code if no key were found.
+ */
 int append_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -440,6 +529,11 @@ int append_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * PREPEND command handler, finds the partition inside the partitions array using
+ * CRC32 and prepend a prefix to the value associated to the found key, returning
+ * MISSING reply code if no key were found.
+ */
 int prepend_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -463,6 +557,10 @@ int prepend_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * EXPIRE command handler, finds the partitions containing the keys using CRC32
+ * and set the expire time specified to that key, after which it will be deleted
+ */
 int expire_command(partition **buckets, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
@@ -480,6 +578,10 @@ int expire_command(partition **buckets, char *command) {
     return ret;
 }
 
+/*
+ * TTL command handler, finds the partitions containing the keys using CRC32 and
+ * get the expire time specified for that key, after which it will be deleted
+ */
 int ttl_command(partition **buckets, char *command, int sock_fd) {
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
@@ -500,6 +602,9 @@ int ttl_command(partition **buckets, char *command, int sock_fd) {
     return 0;
 }
 
+/*
+ * FLUSH command handler, delete the entire keyspace
+ */
 int flush_command(partition **buckets) {
     for (int i = 0; i < PARTITION_NUMBER; i++) {
         partition_release(buckets[i]);
