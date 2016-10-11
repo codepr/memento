@@ -11,10 +11,10 @@
 #define CMD_BUFSIZE 1024
 #define VERSION "0.0.1"
 
-void banner();
-void help();
+void banner(void);
+void help(void);
 void command_loop(int, char *, char *);
-char *read_command();
+char *read_command(void);
 
 int main(int argc, char **argv) {
     int sock_fd, port;
@@ -128,20 +128,20 @@ void command_loop(int fd, char *hostname, char *port) {
     }
 }
 // read a single string containing command
-char *read_command() {
+char *read_command(void) {
     char *line = NULL;
     size_t bufsize = 0;
     getline(&line, &bufsize, stdin);
     return line;
 }
 // print initial banner
-void banner() {
+void banner(void) {
     printf("\n");
     printf("Shibui CLI v %s\n", VERSION);
     printf("Type h or ? or help to print command list\n\n");
 }
 // print help
-void help() {
+void help(void) {
     printf("\n");
     printf("SET key value               Sets <key> to <value>\n");
     printf("GET key                     Get the value identified by <key>\n");

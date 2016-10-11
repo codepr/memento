@@ -37,7 +37,7 @@ int fuzzyscan_command(partition **, char *, int);
 int ttl_command(partition **, char *, int);
 // enumerates
 int count_command(partition **, int);
-int key_command(partition **, int);
+int keys_command(partition **, int);
 int values_command(partition **, int);
 // services
 int flush_command(partition **);

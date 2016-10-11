@@ -128,29 +128,29 @@ static int process_command(partition **buckets, char *buffer, int sock_fd) {
     if (!command)
         return 1;
     // in case of 'QUIT' or 'EXIT' close the connection
-    if (strcasecmp(command, "quit") == 0 || strcasecmp(command, "exit") == 0)
+    if (strncasecmp(command, "quit", strlen(command)) == 0 || strncasecmp(command, "exit", strlen(command)) == 0)
         return END;
     // check if the buffer contains a command and execute it
     for(int i = 0; i < commands_array_len(); i++) {
-        if(strcasecmp(command, commands[i]) == 0) {
+        if (strncasecmp(command, commands[i], strlen(command)) == 0) {
             return (*cmds_func[i])(buckets, buffer + strlen(command) + 1);
         }
     }
     // check if the buffer contains a query and execute it
     for(int i = 0; i < queries_array_len(); i++) {
-        if(strcasecmp(command, queries[i]) == 0) {
+        if (strncasecmp(command, queries[i], strlen(command)) == 0) {
             return (*qrs_func[i])(buckets, buffer + strlen(command) + 1, sock_fd);
         }
     }
     // check if the buffer contains an enumeration command and execute it
     for(int i = 0; i < enumerates_array_len(); i++) {
-        if(strcasecmp(command, enumerates[i]) == 0) {
+        if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
             return (*enum_func[i])(buckets, sock_fd);
         }
     }
     // check if the buffer contains a service command and execute it
     for(int i = 0; i < services_array_len(); i++) {
-        if(strcasecmp(command, services[i]) == 0) {
+        if (strncasecmp(command, services[i], strlen(command)) == 0) {
             return (*srvs_func[i])(buckets);
         }
     }
@@ -312,8 +312,6 @@ void start_server(const char *host, const char* port, int service) {
                             send(events[i].data.fd, "NOT FOUND\n", 10, 0);
                             break;
                         case MAP_FULL:
-                            send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
-                            break;
                         case MAP_OMEM:
                             send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
                             break;
@@ -344,6 +342,7 @@ void start_server(const char *host, const char* port, int service) {
     /* release all partitions */
     for (int i = 0; i < PARTITION_NUMBER; i++)
         partition_release(buckets[i]);
+
     free(events);
     close(sfd);
 

@@ -147,21 +147,21 @@ void trim(char *str) {
 }
 
 /* auxiliary function to check wether a string is an integer */
-int is_integer(char *s) {
+int is_integer(const char *s) {
     int num;
     if (sscanf(s, "%d", &num) == 0) return 0;
     return 1;
 }
 
 /* auxiliary function to check wether a string is a floating number */
-int is_float(char *s) {
+int is_float(const char *s) {
     double dnum;
     if (sscanf(s, "%lf", &dnum) == 0) return 0;
     return 1;
 }
 
 /* auxiliary function to convert integer contained inside string into int */
-int to_int(char *s) {
+int to_int(const char *s) {
     int len = 0;
     while(isdigit(*s)) {
         len = (len * 10) + (*s - '0');
@@ -171,7 +171,7 @@ int to_int(char *s) {
 }
 
 /* auxiliary function to convert double contained inside a string int a double */
-double to_double(char *s) {
+double to_double(const char *s) {
     double dnum;
     if (sscanf(s, "%lf", &dnum) == 1) return dnum;
     return 0.0;

@@ -39,6 +39,7 @@ typedef struct _h_map {
 } h_map;
 
 map_t m_create(void);
+void m_release(map_t);
 int m_iterate(map_t, func, any_t);
 int m_prefscan(map_t, func, any_t, int);
 int m_fuzzyscan(map_t, func, any_t, int);
@@ -51,7 +52,6 @@ int m_sub(map_t, char *, int);
 int m_sub_from(map_t, char *, int, int);
 int m_unsub(map_t, char *, int);
 int m_pub(map_t, char *, any_t);
-void m_release(map_t);
 int m_length(map_t);
 
 #endif

@@ -4,15 +4,37 @@
 #include <string.h>
 #include <sys/socket.h>
 
+/*
+ * Array of commands that doesn't need a file descriptor, they exclusively
+ * perform side-effects on the keyspace
+ */
 const char *commands[]   = { "set", "del", "pub", "inc", "incf", "dec", "decf",
                              "append", "prepend", "expire" };
-
+/*
+ * Array of query-commands, they do not perform side-effects directly on the
+ * keyspace (except for sub/unsub, that add/remove file-descriptor as subscriber
+ * to a 'topic' key), but they need a file-descriptor in order to respond to the
+ * client requesting
+ */
 const char *queries[]    = { "get", "getp", "sub", "unsub", "tail", "prefscan",
                              "fuzzyscan", "ttl" };
+/*
+ * Array of enumeration-commands, they perform action based on iteration through
+ * the whole keyspace and respond with results directly to the client
+ */
+const char *enumerates[] = { "count", "keys", "values" };
 
-const char *enumerates[] = { "count", "key", "values" };
+/*
+ * Array of service-commands, currently there's just one command resident here
+ * flush the whole keyspace by deleting all contents and freeing up space.
+ */
 const char *services[]   = {"flush"};
 
+/*
+ * Length of the commands-arrays, cannot be retrieved with a generic function by
+ * using pointers because the real definition, and ofc the size of the arrays
+ * resides in the source file directly and can mutate during future revisions
+ */
 int commands_array_len(void) {
     return sizeof(commands) / sizeof(char *);
 }
@@ -29,6 +51,9 @@ int services_array_len(void) {
     return sizeof(services) / sizeof(char *);
 }
 
+/* Mapping tables to the commands handlers, maintaining the order defined by
+ * arrays of commands
+ */
 int (*cmds_func[]) (partition **, char *) = {
     &set_command,
     &del_command,
@@ -55,7 +80,7 @@ int (*qrs_func[]) (partition **, char *, int) = {
 
 int (*enum_func[]) (partition **, int) = {
     &count_command,
-    &key_command,
+    &keys_command,
     &values_command
 };
 
@@ -130,7 +155,11 @@ static int print_values(any_t t1, any_t t2) {
 
 /* SET command handler, calculate in which position of the array of the
  * partitions the key-value pair must be stored using CRC32, overwriting in case
- * of a already taken position
+ * of a already taken position.
+ *
+ * Require two arguments:
+ *
+ *     SET <key> <value>
  */
 int set_command(partition **buckets, char *command) {
     int ret = 0;
@@ -153,7 +182,11 @@ int set_command(partition **buckets, char *command) {
 /*
  * GET command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32, write back the value associated to
- * it if present, MISSING reply code otherwise
+ * it if present, MISSING reply code otherwise.
+ *
+ * Require one argument:
+ *
+ *     GET <key>
  */
 int get_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
@@ -176,7 +209,11 @@ int get_command(partition **buckets, char *command, int sock_fd) {
  * GETP command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32, write back all the informations
  * associated to the key-value pair if present, including expire time and
- * creation time, MISSING reply code otherwise
+ * creation time, MISSING reply code otherwise.
+ *
+ * Require one argument:
+ *
+ *     GETP <key>
  */
 int getp_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
@@ -202,7 +239,11 @@ int getp_command(partition **buckets, char *command, int sock_fd) {
 /*
  * DEL command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32 and delete it if present, return
- * MISSING reply code otherwise
+ * MISSING reply code otherwise.
+ *
+ * Require one argument:
+ *
+ *     DEL <key>
  */
 int del_command(partition **buckets, char *command) {
     int ret = 0;
@@ -220,7 +261,11 @@ int del_command(partition **buckets, char *command) {
 /*
  * SUB command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32 and subscribe the file descriptor to
- * it if present, return MISSING reply code otherwise
+ * it if present, return MISSING reply code otherwise.
+ *
+ * Require at least one argument, but accept a list as well:
+ *
+ *     SUB <key1> <key2> .. <keyN>
  */
 int sub_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
@@ -238,7 +283,11 @@ int sub_command(partition **buckets, char *command, int sock_fd) {
 /*
  * UNSUB command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32 and unsubscribe the file descriptor
- * to it if present, return MISSING reply code otherwise
+ * to it if present, return MISSING reply code otherwise.
+ *
+ * Require at least one argument, but accept a list as well:
+ *
+ *     UNSUB <key1> <key2> .. <keyN>
  */
 int unsub_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
@@ -259,6 +308,10 @@ int unsub_command(partition **buckets, char *command, int sock_fd) {
  * to it if present, return MISSING reply code otherwise.
  * All subscribed file descriptor will receive the value as a message
  * themselves.
+ *
+ * Require two arguments:
+ *
+ *     PUB <key> <value>
  */
 int pub_command(partition **buckets, char *command) {
     int ret = 0;
@@ -281,6 +334,12 @@ int pub_command(partition **buckets, char *command) {
  * INC command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32 and increment (add 1) to the integer
  * value to it if present, return MISSING reply code otherwise.
+ *
+ * Requires at least one arguments, but also accept optionally the amount to be
+ * added to the specified key:
+ *
+ *     INC <key>   // +1 to <key>
+ *     INC <key> 5 // +5 to <key>
  */
 int inc_command(partition **buckets, char *command) {
     int ret = 0;
@@ -310,6 +369,12 @@ int inc_command(partition **buckets, char *command) {
  * INCF command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32 and increment (add 1.00) to the
  * float value to it if present, return MISSING reply code otherwise.
+ *
+ * Requires at least one arguments, but also accept optionally the amount to be
+ * added to the specified key:
+ *
+ *     INCF <key>     // +1.0 to <key>
+ *     INCF <key> 5.0 // +5.0 to <key>
  */
 int incf_command(partition **buckets, char *command) {
     int ret = 0;
@@ -339,6 +404,12 @@ int incf_command(partition **buckets, char *command) {
  * DEC command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32 and decrement (subtract 1) to the
  * integer value to it if present, return MISSING reply code otherwise.
+ *
+ * Requires at least one arguments, but also accept optionally the amount to be
+ * subtracted to the specified key:
+ *
+ *     DEC <key>   // -1 to <key>
+ *     DEC <key> 5 // -5 to <key>
  */
 int dec_command(partition **buckets, char *command) {
     int ret = 0;
@@ -368,6 +439,12 @@ int dec_command(partition **buckets, char *command) {
  * DECF command handler, calculate in which position of the array of the
  * partitions the key is stored using CRC32 and decrement (subtract 1.00) to the
  * foat value to it if present, return MISSING reply code otherwise.
+ *
+ * Requires at least one arguments, but also accept optionally the amount to be
+ * subtracted to the specified key:
+ *
+ *     DECF <key>     // -1.0 to <key>
+ *     DECF <key> 5.0 // -5.0 to <key>
  */
 int decf_command(partition **buckets, char *command) {
     int ret = 0;
@@ -395,7 +472,9 @@ int decf_command(partition **buckets, char *command) {
 
 /*
  * COUNT command handler, count all key-value pairs stored in the hashmap and
- * write the result back to the file-descriptor
+ * write the result back to the file-descriptor.
+ *
+ * Doesn't require any argument.
  */
 int count_command(partition **buckets, int sock_fd) {
     int len = 0;
@@ -410,8 +489,10 @@ int count_command(partition **buckets, int sock_fd) {
 /*
  * KEYS command handler, iterate through all the keyspace and return a list of
  * the present keys.
+ *
+ * Doesn't require any argument.
  */
-int key_command(partition **buckets, int sock_fd) {
+int keys_command(partition **buckets, int sock_fd) {
     for (int i = 0; i < PARTITION_NUMBER; i++)
         if (buckets[i]->map->size > 0)
             m_iterate(buckets[i]->map, print_keys, &sock_fd);
@@ -421,6 +502,8 @@ int key_command(partition **buckets, int sock_fd) {
 /*
  * VALUES command handler, iterate through all the keyspace and return a list of
  * the present values associated to them.
+ *
+ * Doesn't require any argument.
  */
 int values_command(partition **buckets, int sock_fd) {
     for (int i = 0; i < PARTITION_NUMBER; i++)
@@ -433,6 +516,12 @@ int values_command(partition **buckets, int sock_fd) {
  * TAIL command handler, works like SUB but using an index as a cursor on the
  * queue of the previous published values associated to a key, it allow to
  * iterate through the full history of the pubblications at will.
+ *
+ * Require at least one argument, but accept also an optional cursor that define
+ * from where to start in the queue of messages associated to the 'topic' key:
+ *
+ *     TAIL <key>
+ *     TAIL <key> 5 // leap through the first 5 messages
  */
 int tail_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
@@ -458,7 +547,11 @@ int tail_command(partition **buckets, char *command, int sock_fd) {
 /*
  * PREFSCAN command handler, scans the entire keyspace and build a list with all
  * the keys that match the prefix passed directly writing it back to the
- * file-descriptor
+ * file-descriptor.
+ *
+ * Require one argument:
+ *
+ *     PREFSCAN <keyprefix>
  */
 int prefscan_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
@@ -481,7 +574,11 @@ int prefscan_command(partition **buckets, char *command, int sock_fd) {
 /*
  * FUZZYSCAN command handler, scans the entire keyspace and build a list with
  * all the keys that match the prefix according to a basic fuzzy-search
- * algorithm passed directly writing it back to the file-descriptor
+ * algorithm passed directly writing it back to the file-descriptor.
+ *
+ * Require one argument:
+ *
+ *     FUZZYSCAN <keyprefix>
  */
 int fuzzyscan_command(partition **buckets, char *command, int sock_fd) {
     int ret = 0;
@@ -505,6 +602,10 @@ int fuzzyscan_command(partition **buckets, char *command, int sock_fd) {
  * APPEND command handler, finds the partition inside the partitions array using
  * CRC32 and append a suffix to the value associated to the found key, returning
  * MISSING reply code if no key were found.
+ *
+ * Require two arguments:
+ *
+ *     APPEND <key> <value>
  */
 int append_command(partition **buckets, char *command) {
     int ret = 0;
@@ -533,6 +634,10 @@ int append_command(partition **buckets, char *command) {
  * PREPEND command handler, finds the partition inside the partitions array using
  * CRC32 and prepend a prefix to the value associated to the found key, returning
  * MISSING reply code if no key were found.
+ *
+ * Require two arguments:
+ *
+ *     PREPEND <key> <value>
  */
 int prepend_command(partition **buckets, char *command) {
     int ret = 0;
@@ -559,7 +664,11 @@ int prepend_command(partition **buckets, char *command) {
 
 /*
  * EXPIRE command handler, finds the partitions containing the keys using CRC32
- * and set the expire time specified to that key, after which it will be deleted
+ * and set the expire time specified to that key, after which it will be deleted.
+ *
+ * Require two arguments:
+ *
+ *     EXPIRE <key> <ms>
  */
 int expire_command(partition **buckets, char *command) {
     int ret = 0;
@@ -580,7 +689,11 @@ int expire_command(partition **buckets, char *command) {
 
 /*
  * TTL command handler, finds the partitions containing the keys using CRC32 and
- * get the expire time specified for that key, after which it will be deleted
+ * get the expire time specified for that key, after which it will be deleted.
+ *
+ * Require one argument:
+ *
+ *     TTL <key>
  */
 int ttl_command(partition **buckets, char *command, int sock_fd) {
     char *arg_1 = NULL;
@@ -603,7 +716,9 @@ int ttl_command(partition **buckets, char *command, int sock_fd) {
 }
 
 /*
- * FLUSH command handler, delete the entire keyspace
+ * FLUSH command handler, delete the entire keyspace.
+ *
+ * Doesn't require any argument.
  */
 int flush_command(partition **buckets) {
     for (int i = 0; i < PARTITION_NUMBER; i++) {

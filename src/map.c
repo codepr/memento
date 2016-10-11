@@ -517,13 +517,16 @@ static int destroy(any_t t1, any_t t2) {
 void m_release(map_t in){
     h_map* m = (h_map*) in;
     m_iterate(m, destroy, NULL);
-    free(m->data);
-    free(m);
+    if (m) {
+        if (m->data)
+            free(m->data);
+        free(m);
+    }
 }
 
 /* Return the length of the hashmap */
 int m_length(map_t in){
     h_map* m = (h_map *) in;
-    if(m != NULL) return m->size;
+    if (m != NULL) return m->size;
     else return 0;
 }
