@@ -711,7 +711,7 @@ int ttl_command(partition **buckets, char *command, int sock_fd) {
                 sprintf(ttl, "%d\n", -1);
             send(sock_fd, ttl, 7, 0);
         }
-    }
+    } else return MAP_MISSING;
     return 0;
 }
 

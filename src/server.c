@@ -19,10 +19,10 @@
 #include "commands.h"
 #include "persistence.h"
 
-#define COMMAND_NOT_FOUND -4
-#define EXPIRATION_CHECK_INTERVAL 3 // check every 3s
+#define COMMAND_NOT_FOUND (-4)
+#define EXPIRATION_CHECK_INTERVAL (3) // check every 3s
 
-static unsigned int is_checking = 0;
+static unsigned int is_checking = 0; /* expire-time-key-check thread flag */
 
 // set non-blocking socket
 static int set_socket_non_blocking(int fd) {
@@ -40,13 +40,15 @@ static int set_socket_non_blocking(int fd) {
     return 0;
 }
 
-/* Check every key expire time, if any is set */
+/* Check every key expire time, if any is set, remove the keys that has exceeded
+ * their lifetime
+ */
 static int check_expire_time(any_t t1, any_t t2) {
-    long current_ms = current_timestamp();
     h_map *m = (h_map *) t1;
     kv_pair *kv = (kv_pair *) t2;
     if (m && kv) {
         if (kv->in_use == 1 && kv->has_expire_time != 0) {
+            long current_ms = current_timestamp();
             long delta = current_ms - kv->creation_time;
             if (delta >= kv->expire_time) {
                 trim(kv->key);
@@ -57,7 +59,9 @@ static int check_expire_time(any_t t1, any_t t2) {
     return 1;
 }
 
-/* daemon to control all expire time of keys in the partitions */
+/* daemon to control all expire time of keys in the partitions, iterates through
+ * the entire keyspace checking the expire time of every key that has one set
+ */
 static void *expire_control_pthread(void *arg) {
     partition **buckets = (partition **) arg;
     if (buckets) {
@@ -131,25 +135,25 @@ static int process_command(partition **buckets, char *buffer, int sock_fd) {
     if (strncasecmp(command, "quit", strlen(command)) == 0 || strncasecmp(command, "exit", strlen(command)) == 0)
         return END;
     // check if the buffer contains a command and execute it
-    for(int i = 0; i < commands_array_len(); i++) {
+    for (int i = 0; i < commands_array_len(); i++) {
         if (strncasecmp(command, commands[i], strlen(command)) == 0) {
             return (*cmds_func[i])(buckets, buffer + strlen(command) + 1);
         }
     }
     // check if the buffer contains a query and execute it
-    for(int i = 0; i < queries_array_len(); i++) {
+    for (int i = 0; i < queries_array_len(); i++) {
         if (strncasecmp(command, queries[i], strlen(command)) == 0) {
             return (*qrs_func[i])(buckets, buffer + strlen(command) + 1, sock_fd);
         }
     }
     // check if the buffer contains an enumeration command and execute it
-    for(int i = 0; i < enumerates_array_len(); i++) {
+    for (int i = 0; i < enumerates_array_len(); i++) {
         if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
             return (*enum_func[i])(buckets, sock_fd);
         }
     }
     // check if the buffer contains a service command and execute it
-    for(int i = 0; i < services_array_len(); i++) {
+    for (int i = 0; i < services_array_len(); i++) {
         if (strncasecmp(command, services[i], strlen(command)) == 0) {
             return (*srvs_func[i])(buckets);
         }
@@ -322,6 +326,7 @@ void start_server(const char *host, const char* port, int service) {
                             done = 1;
                             break;
                         default:
+                            continue;
                             break;
                         }
                         free(buf);

@@ -148,8 +148,9 @@ void trim(char *str) {
 
 /* auxiliary function to check wether a string is an integer */
 int is_integer(const char *s) {
-    int num;
-    if (sscanf(s, "%d", &num) == 0) return 0;
+    size_t ln = strlen(s) - 1;
+    for(unsigned long i = 0; i < ln; i++)
+        if(!isdigit(s[i])) return 0;
     return 1;
 }
 

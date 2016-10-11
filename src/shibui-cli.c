@@ -7,6 +7,8 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <time.h>
+#include <sys/time.h>
 
 #define CMD_BUFSIZE 1024
 #define VERSION "0.0.1"
@@ -111,6 +113,29 @@ void command_loop(int fd, char *hostname, char *port) {
                        strncasecmp(token, "HELP", 4) == 0) {
                 help();
                 bzero(buf, CMD_BUFSIZE);
+            /* } else if (strncasecmp(comm, "BENCHMARK", 9) == 0) { */
+            /*     /\* clock_t start_t, end_t; *\/ */
+            /*     /\* start_t = clock(); *\/ */
+            /*     struct timeval start, stop; */
+            /*     double secs = 0; */
+
+            /*     gettimeofday(&start, NULL); */
+
+            /*     for (int i = 0; i < 30000; i++) { */
+            /*         /\* char payload[30]; *\/ */
+            /*         /\* sprintf(payload, "set key%d value%d\r\n", i, i); *\/ */
+            /*         /\* printf("%s\n", payload); *\/ */
+            /*         char *payload = "set key value\r\n"; */
+            /*         status = write(fd, payload, 15); */
+            /*         /\* bzero(buf, CMD_BUFSIZE); *\/ */
+            /*         /\* status = read(fd, buf, CMD_BUFSIZE); *\/ */
+            /*     } */
+            /*     /\* end_t = clock(); *\/ */
+            /*     /\* double delta_t = (double) (end_t - start_t) / CLOCKS_PER_SEC; *\/ */
+            /*     gettimeofday(&stop, NULL); */
+            /*     secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec); */
+            /*     printf("Nr. of set ops: %d\n", 30000); */
+            /*     printf("CPU time: %lf\n", secs); */
             } else {
                 // write to server
                 status = write(fd, line, strlen(line));
