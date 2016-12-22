@@ -163,6 +163,7 @@ static int process_command(partition **buckets, char *buffer, int sock_fd) {
 
 // start server instance, by setting hostname
 void start_server(const char *host, const char* port, int service) {
+    h_map *peers = m_create();
     // partition buckets, every bucket can contain a variable number of
     // key-value pair
     partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
@@ -263,6 +264,9 @@ void start_server(const char *host, const char* port, int service) {
                         time_t now = time(0);
                         strftime(time_buff, 100, "[%Y-%m-%d %H:%M:%S]", localtime(&now));
                         printf("%s - new connection from %s:%s on descriptor %d \n", time_buff,  hbuf, sbuf, infd);
+                        if (service == 1) {
+                            m_put(peers, hbuf, &infd);
+                        }
                     }
 
                     /* Make the incoming socket non-blocking and add it to the
