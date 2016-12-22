@@ -20,6 +20,7 @@ queue *create_queue(void);
 void enqueue(queue *, void *);
 void *dequeue(queue *);
 void *peek(queue *);
+int queue_contains(queue *, void *);
 unsigned long queue_len(queue *);
 void release_queue(queue *);
 iterator queue_next(iterator);

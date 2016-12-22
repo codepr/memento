@@ -7,6 +7,7 @@ queue *create_queue(void) {
     q->front = q->rear = NULL;
     return q;
 }
+
 /* insert data on the rear node */
 void enqueue(queue *q, void *data) {
     queue_node *new_node = (queue_node*) malloc(sizeof(queue_node));
@@ -22,6 +23,7 @@ void enqueue(queue *q, void *data) {
         q->rear = new_node;
     }
 }
+
 /* remove data from the front node and deallocate it */
 void *dequeue(queue* q) {
     queue_node *del_node;
@@ -45,6 +47,7 @@ void *dequeue(queue* q) {
     }
     return del_item;
 }
+
 /* peek for the first element of the queue without removing it */
 void *peek(queue* q) {
     void *peek_item;
@@ -57,6 +60,13 @@ void *peek(queue* q) {
         peek_item = q->front->data;
     }
     return peek_item;
+}
+
+int queue_contains(queue *q, void *data) {
+    if (q != NULL)
+        for (int i = 0; i < queue_len(q); ++i)
+            if (((q->rear)+i)->data == data) return 1;
+    return -1;
 }
 
 unsigned long queue_len(queue *q) {

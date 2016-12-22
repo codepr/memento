@@ -11,11 +11,25 @@
 #define CMD_BUFSIZE 1024
 
 void cluster_add_node(queue *cluster_members, int fd) {
-    struct member m;
-    m.fd= fd;
-    m.min = 0;
-    m.max = 1024;
-    enqueue(cluster_members, &m);
+    struct member *m = (struct member *) malloc(sizeof(struct member));
+    m->min = 0;
+    m->max = 1024;
+    int *file_descriptor = (int *) malloc(sizeof(int));
+    *file_descriptor = fd;
+    m->fd = *file_descriptor;
+    if ((queue_contains(cluster_members, m)) == -1) {
+        printf("Added %d\n", fd);
+        enqueue(cluster_members, m);
+        char cmd[7] = "ADDNODE";
+        for (int i = 0; i < queue_len(cluster_members); ++i) {
+            int desc = ((struct member *) (((cluster_members->rear)+i)->data))->fd;
+            if (desc != fd) {
+                printf("Comanding to %d\n", desc);
+                if ((write(desc, cmd, strlen(cmd))) == -1)
+                    perror("WRITE");
+            }
+        }
+    }
 }
 
 void cluster_join(queue *cluster_members, const char *hostname, const char *port) {
