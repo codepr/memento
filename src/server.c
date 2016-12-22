@@ -124,7 +124,7 @@ static int create_and_bind(const char *host, const char *port) {
  * of hashmap, keys are distributed through consistent hashing calculated with
  * crc32 % PARTITION_NUMBER
  */
-static int process_command(partition **buckets, char *buffer, int sock_fd) {
+static int process_command(queue *cluster, partition **buckets, char *buffer, int sock_fd) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
     // in case of empty command return nothing, next additions will be awaiting
@@ -134,6 +134,10 @@ static int process_command(partition **buckets, char *buffer, int sock_fd) {
     // in case of 'QUIT' or 'EXIT' close the connection
     if (strncasecmp(command, "quit", strlen(command)) == 0 || strncasecmp(command, "exit", strlen(command)) == 0)
         return END;
+    if (strncasecmp(command, "addnode", strlen(command)) == 0) {
+        printf(" <*> ADD NEW NODE TO THE CLUSTER %d\n", sock_fd);
+        return addnode_command(cluster, sock_fd);
+    }
     // check if the buffer contains a command and execute it
     for (int i = 0; i < commands_array_len(); i++) {
         if (strncasecmp(command, commands[i], strlen(command)) == 0) {
@@ -162,8 +166,7 @@ static int process_command(partition **buckets, char *buffer, int sock_fd) {
 }
 
 // start server instance, by setting hostname
-void start_server(const char *host, const char* port, int service) {
-    h_map *peers = m_create();
+void start_server(queue *cluster, const char *host, const char* port) {
     // partition buckets, every bucket can contain a variable number of
     // key-value pair
     partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
@@ -264,9 +267,6 @@ void start_server(const char *host, const char* port, int service) {
                         time_t now = time(0);
                         strftime(time_buff, 100, "[%Y-%m-%d %H:%M:%S]", localtime(&now));
                         printf("%s - new connection from %s:%s on descriptor %d \n", time_buff,  hbuf, sbuf, infd);
-                        if (service == 1) {
-                            m_put(peers, hbuf, &infd);
-                        }
                     }
 
                     /* Make the incoming socket non-blocking and add it to the
@@ -310,9 +310,8 @@ void start_server(const char *host, const char* port, int service) {
                         free(buf);
                         break;
                     }
-                    if (service == 0) {
-                        int proc = process_command(buckets, buf, events[i].data.fd);
-                        switch(proc) {
+                    int proc = process_command(cluster, buckets, buf, events[i].data.fd);
+                    switch(proc) {
                         case MAP_OK:
                             send(events[i].data.fd, "OK\n", 3, 0);
                             break;
@@ -332,9 +331,8 @@ void start_server(const char *host, const char* port, int service) {
                         default:
                             continue;
                             break;
-                        }
-                        free(buf);
                     }
+                    free(buf);
                 }
 
                 if (done) {

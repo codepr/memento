@@ -1,4 +1,5 @@
 #include "commands.h"
+#include "cluster.h"
 #include "util.h"
 #include <stdio.h>
 #include <string.h>
@@ -725,5 +726,11 @@ int flush_command(partition **buckets) {
         partition_release(buckets[i]);
         buckets[i] = create_partition();
     }
+    return OK;
+}
+
+// cluster add node command
+int addnode_command(queue *cluster, int fd) {
+    cluster_add_node(cluster, fd);
     return OK;
 }
