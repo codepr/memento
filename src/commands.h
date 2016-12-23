@@ -42,7 +42,7 @@ int values_command(partition **, int);
 // services
 int flush_command(partition **);
 // cluster
-int addnode_command(queue *, int);
+int addnode_command(map_t, int);
 
 extern int (*cmds_func[]) (partition **, char *);
 extern int (*qrs_func[]) (partition **, char *, int);

@@ -1,4 +1,5 @@
 #include "cluster.h"
+#include "partition.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -10,29 +11,43 @@
 
 #define CMD_BUFSIZE 1024
 
-void cluster_add_node(queue *cluster_members, int fd) {
-    struct member *m = (struct member *) malloc(sizeof(struct member));
-    m->min = 0;
-    m->max = 1024;
-    int *file_descriptor = (int *) malloc(sizeof(int));
-    *file_descriptor = fd;
-    m->fd = *file_descriptor;
-    if ((queue_contains(cluster_members, m)) == -1) {
-        printf("Added %d\n", fd);
-        enqueue(cluster_members, m);
-        char cmd[7] = "ADDNODE";
-        for (int i = 0; i < queue_len(cluster_members); ++i) {
-            int desc = ((struct member *) (((cluster_members->rear)+i)->data))->fd;
-            if (desc != fd) {
-                printf("Comanding to %d\n", desc);
-                if ((write(desc, cmd, strlen(cmd))) == -1)
-                    perror("WRITE");
+/*
+ * Retrieve cluster size and values of members from cluster_members then we
+ * have to partition 1024 slots equally
+ */
+static void slot_distribution(map_t cluster_members) {
+    h_map* map = (h_map *) cluster_members;
+    int counter = 0;
+    int step = PARTITION_NUMBER / m_length(cluster_members);
+    // iterate through the keyspace
+    for(int i = 0; i < map->table_size; i++)
+        if (map->data[i].in_use != 0) {
+            if (map->data[i].data != NULL) {
+                struct member *m = (struct member *) map->data[i].data;
+                m->min = step * counter;
+                m->max = (m->min + step) - 1;
+                counter++;
+                printf("<*> NODE %d HAS RANGE -> %d - %d\n", m->fd, m->min, m->max);
             }
         }
-    }
 }
 
-void cluster_join(queue *cluster_members, const char *hostname, const char *port) {
+/*
+ * Add a new node to the cluster, currently tracked only on master node (temporary)
+ */
+void cluster_add_node(map_t cluster_members, int fd) {
+    struct member *m = (struct member *) malloc(sizeof(struct member));
+    m->min = 0;
+    m->max = PARTITION_NUMBER;
+    m->fd = fd;
+    char key[3];
+    sprintf(key, "%d", fd);
+    m_put(cluster_members, key, m);
+    printf("<*> NEW NODE JOINED - CLUSTER SIZE -> %d\n", m_length(cluster_members));
+    slot_distribution(cluster_members);
+}
+
+void cluster_join(map_t cluster_members, const char *hostname, const char *port) {
     int p = atoi(port);
     char buf[CMD_BUFSIZE];
     struct sockaddr_in serveraddr;
@@ -62,9 +77,11 @@ void cluster_join(queue *cluster_members, const char *hostname, const char *port
         exit(0);
     }
 
-    cluster_add_node(cluster_members, sock_fd);
+    /* cluster_add_node(cluster_members, sock_fd); */
     char cmd[7] = "ADDNODE";
-    fcntl(sock_fd, F_SETFL, O_NONBLOCK);
+    /* char cmd[10]; */
+    /* sprintf(cmd, "ADDNODE %d\n", sock_fd); */
+    /* fcntl(sock_fd, F_SETFL, O_NONBLOCK); */
     if ((write(sock_fd, cmd, strlen(cmd))) == -1)
         perror("WRITE");
 

@@ -1,7 +1,7 @@
 #ifndef CLUSTER_H
 #define CLUSTER_H
 
-#include "queue.h"
+#include "map.h"
 
 struct member {
     int fd;
@@ -9,7 +9,7 @@ struct member {
     int max;
 };
 
-void cluster_add_node(queue *, int);
-void cluster_join(queue *, const char *, const char *);
+void cluster_add_node(map_t, int);
+void cluster_join(map_t, const char *, const char *);
 
 #endif

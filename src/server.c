@@ -124,7 +124,7 @@ static int create_and_bind(const char *host, const char *port) {
  * of hashmap, keys are distributed through consistent hashing calculated with
  * crc32 % PARTITION_NUMBER
  */
-static int process_command(queue *cluster, partition **buckets, char *buffer, int sock_fd) {
+static int process_command(map_t cluster, partition **buckets, char *buffer, int sock_fd) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
     // in case of empty command return nothing, next additions will be awaiting
@@ -134,10 +134,10 @@ static int process_command(queue *cluster, partition **buckets, char *buffer, in
     // in case of 'QUIT' or 'EXIT' close the connection
     if (strncasecmp(command, "quit", strlen(command)) == 0 || strncasecmp(command, "exit", strlen(command)) == 0)
         return END;
-    if (strncasecmp(command, "addnode", strlen(command)) == 0) {
-        printf(" <*> ADD NEW NODE TO THE CLUSTER %d\n", sock_fd);
+
+    if (strncasecmp(command, "addnode", strlen(command)) == 0)
         return addnode_command(cluster, sock_fd);
-    }
+
     // check if the buffer contains a command and execute it
     for (int i = 0; i < commands_array_len(); i++) {
         if (strncasecmp(command, commands[i], strlen(command)) == 0) {
@@ -166,7 +166,7 @@ static int process_command(queue *cluster, partition **buckets, char *buffer, in
 }
 
 // start server instance, by setting hostname
-void start_server(queue *cluster, const char *host, const char* port) {
+void start_server(map_t cluster, const char *host, const char* port) {
     // partition buckets, every bucket can contain a variable number of
     // key-value pair
     partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
@@ -228,8 +228,8 @@ void start_server(queue *cluster, const char *host, const char* port) {
         n = epoll_wait(efd, events, MAX_EVENTS, -1);
         for (i = 0; i < n; i++) {
             if ((events[i].events & EPOLLERR) ||
-                (events[i].events & EPOLLHUP) ||
-                (!(events[i].events & EPOLLIN))) {
+                    (events[i].events & EPOLLHUP) ||
+                    (!(events[i].events & EPOLLIN))) {
                 perror("epoll error");
                 close(events[i].data.fd);
                 continue;
@@ -248,7 +248,7 @@ void start_server(queue *cluster, const char *host, const char* port) {
                     infd = accept(sfd, &in_addr, &in_len);
                     if (infd == -1) {
                         if ((errno == EAGAIN) ||
-                            (errno == EWOULDBLOCK)) {
+                                (errno == EWOULDBLOCK)) {
                             /* processed all incoming connections. */
                             break;
                         }
@@ -259,9 +259,9 @@ void start_server(queue *cluster, const char *host, const char* port) {
                     }
 
                     s = getnameinfo(&in_addr, in_len,
-                                    hbuf, sizeof hbuf,
-                                    sbuf, sizeof sbuf,
-                                    NI_NUMERICHOST | NI_NUMERICSERV);
+                            hbuf, sizeof hbuf,
+                            sbuf, sizeof sbuf,
+                            NI_NUMERICHOST | NI_NUMERICSERV);
                     if (s == 0) {
                         char time_buff[100];
                         time_t now = time(0);
@@ -337,7 +337,7 @@ void start_server(queue *cluster, const char *host, const char* port) {
 
                 if (done) {
                     printf("Closed connection on descriptor %d\n",
-                           events[i].data.fd);
+                            events[i].data.fd);
                     /* Closing the descriptor will make epoll remove it from the
                        set of descriptors which are monitored. */
                     close(events[i].data.fd);

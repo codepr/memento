@@ -730,7 +730,7 @@ int flush_command(partition **buckets) {
 }
 
 // cluster add node command
-int addnode_command(queue *cluster, int fd) {
+int addnode_command(map_t cluster, int fd) {
     cluster_add_node(cluster, fd);
     return OK;
 }

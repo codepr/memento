@@ -5,9 +5,9 @@
 #define MAX_DATA_SIZE (10485760)
 #define MAX_EVENTS (100)
 
-#include "queue.h"
+#include "map.h"
 #include "partition.h"
 
-void start_server(queue *, const char *, const char *);
+void start_server(map_t, const char *, const char *);
 
 #endif
