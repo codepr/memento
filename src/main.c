@@ -60,6 +60,7 @@ int main(int argc, char **argv) {
     if (master == 1) {
         if (pthread_create(&t, NULL, &cluster_pthread, conn) != 0)
             perror("ERROR pthread");
+        cluster_add_node(cluster, 0);
         start_server(cluster, address, port);
     } else {
         if (pthread_create(&t, NULL, &cluster_join_pthread, conn) != 0)

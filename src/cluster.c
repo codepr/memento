@@ -27,7 +27,7 @@ static void slot_distribution(map_t cluster_members) {
                 m->min = step * counter;
                 m->max = (m->min + step) - 1;
                 counter++;
-                printf("<*> NODE %d HAS RANGE -> %d - %d\n", m->fd, m->min, m->max);
+                printf("<*> Node %d has slots -> [%d - %d]\n", m->fd, m->min, m->max);
             }
         }
 }
@@ -43,7 +43,7 @@ void cluster_add_node(map_t cluster_members, int fd) {
     char key[3];
     sprintf(key, "%d", fd);
     m_put(cluster_members, key, m);
-    printf("<*> NEW NODE JOINED - CLUSTER SIZE -> %d\n", m_length(cluster_members));
+    printf("<*> New node joined - cluster size -> %d\n", m_length(cluster_members));
     slot_distribution(cluster_members);
 }
 

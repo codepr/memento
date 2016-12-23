@@ -265,8 +265,8 @@ void start_server(map_t cluster, const char *host, const char* port) {
                     if (s == 0) {
                         char time_buff[100];
                         time_t now = time(0);
-                        strftime(time_buff, 100, "[%Y-%m-%d %H:%M:%S]", localtime(&now));
-                        printf("%s - new connection from %s:%s on descriptor %d \n", time_buff,  hbuf, sbuf, infd);
+                        strftime(time_buff, 100, "<*> [%Y-%m-%d %H:%M:%S]", localtime(&now));
+                        printf("%s - New connection from %s:%s on descriptor %d \n", time_buff,  hbuf, sbuf, infd);
                     }
 
                     /* Make the incoming socket non-blocking and add it to the
