@@ -10,6 +10,13 @@ struct connection {
     map_t *cluster;
 };
 
+static void add_master_node(map_t cluster_members, char *key) {
+    struct member *m = (struct member *) malloc(sizeof(struct member));
+    m->min = 0;
+    m->max = PARTITION_NUMBER;
+    m_put(cluster_members, key, m);
+}
+
 static void *cluster_pthread(void *param) {
     struct connection *conn = (struct connection *) param;
     const char *address = conn->address;
@@ -60,7 +67,7 @@ int main(int argc, char **argv) {
     if (master == 1) {
         if (pthread_create(&t, NULL, &cluster_pthread, conn) != 0)
             perror("ERROR pthread");
-        cluster_add_node(cluster, 0);
+        add_master_node(cluster, "0");
         start_server(cluster, address, port);
     } else {
         if (pthread_create(&t, NULL, &cluster_join_pthread, conn) != 0)

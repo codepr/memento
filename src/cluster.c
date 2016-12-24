@@ -1,5 +1,6 @@
 #include "cluster.h"
 #include "partition.h"
+#include "util.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -32,6 +33,14 @@ static void slot_distribution(map_t cluster_members) {
         }
 }
 
+static void add_master_node(map_t cluster_members, int fd, int min, int max) {
+    struct member *m = (struct member *) malloc(sizeof(struct member));
+    m->min = min;
+    m->max = max;
+    m->fd = fd;
+    m_put(cluster_members, "0", m);
+}
+
 /*
  * Add a new node to the cluster, currently tracked only on master node (temporary)
  */
@@ -45,6 +54,19 @@ void cluster_add_node(map_t cluster_members, int fd) {
     m_put(cluster_members, key, m);
     printf("<*> New node joined - cluster size -> %d\n", m_length(cluster_members));
     slot_distribution(cluster_members);
+    void *val = NULL;
+    m_get(cluster_members, "0", &val);
+    struct member *master = (struct member *) val;
+    char cmd[15];
+    sprintf(cmd, "MASTER %d %d\n", master->min, master->max);
+    h_map* map = (h_map *) cluster_members;
+    for(int i = 0; i < map->table_size; i++) {
+        if (map->data[i].in_use != 0 && (strcmp(map->data[i].key, "0")) != 0) {
+            struct member *curr = (struct member *) map->data[i].data;
+            if ((write(curr->fd, cmd, strlen(cmd))) == -1)
+                perror("WRITE");
+        }
+    }
 }
 
 void cluster_join(map_t cluster_members, const char *hostname, const char *port) {
@@ -77,17 +99,23 @@ void cluster_join(map_t cluster_members, const char *hostname, const char *port)
         exit(0);
     }
 
-    /* cluster_add_node(cluster_members, sock_fd); */
     char cmd[7] = "ADDNODE";
-    /* char cmd[10]; */
-    /* sprintf(cmd, "ADDNODE %d\n", sock_fd); */
-    /* fcntl(sock_fd, F_SETFL, O_NONBLOCK); */
+        /* fcntl(sock_fd, F_SETFL, O_NONBLOCK); */
     if ((write(sock_fd, cmd, strlen(cmd))) == -1)
         perror("WRITE");
 
     while(read(sock_fd, buf, CMD_BUFSIZE) > 0) {
-        printf("%s", buf);
+        if (strncasecmp(buf, "master", 6) == 0) {
+            printf("%s\n", buf);
+            int min = to_int(strtok(buf, " "));
+            int max = to_int(strtok(buf, " "));
+            add_master_node(cluster_members, sock_fd, min, max);
+        }
         bzero(buf, CMD_BUFSIZE);
     }
-
 }
+
+/* int cluster_send_command(map_t cluster, const char *command, int fd) { */
+/*     if((write(fd, command, strlen(command))) == -1) */
+/*         perror("WRITE"); */
+/* } */
