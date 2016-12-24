@@ -33,6 +33,9 @@ static void slot_distribution(map_t cluster_members) {
         }
 }
 
+/*
+ * Private function needed to add the master node, used by slave nodes
+ */
 static void add_master_node(map_t cluster_members, int fd, int min, int max) {
     struct member *m = (struct member *) malloc(sizeof(struct member));
     m->min = min;
@@ -69,6 +72,10 @@ void cluster_add_node(map_t cluster_members, int fd) {
     }
 }
 
+/*
+ * Join the cluster, used by slave nodes to set a connection with the master
+ * node
+ */
 void cluster_join(map_t cluster_members, const char *hostname, const char *port) {
     int p = atoi(port);
     char buf[CMD_BUFSIZE];
@@ -100,13 +107,13 @@ void cluster_join(map_t cluster_members, const char *hostname, const char *port)
     }
 
     char cmd[7] = "ADDNODE";
-        /* fcntl(sock_fd, F_SETFL, O_NONBLOCK); */
+    /* fcntl(sock_fd, F_SETFL, O_NONBLOCK); */
     if ((write(sock_fd, cmd, strlen(cmd))) == -1)
         perror("WRITE");
 
     while(read(sock_fd, buf, CMD_BUFSIZE) > 0) {
+        printf("%s", buf);
         if (strncasecmp(buf, "master", 6) == 0) {
-            printf("%s\n", buf);
             int min = to_int(strtok(buf, " "));
             int max = to_int(strtok(buf, " "));
             add_master_node(cluster_members, sock_fd, min, max);
@@ -115,7 +122,28 @@ void cluster_join(map_t cluster_members, const char *hostname, const char *port)
     }
 }
 
-/* int cluster_send_command(map_t cluster, const char *command, int fd) { */
-/*     if((write(fd, command, strlen(command))) == -1) */
-/*         perror("WRITE"); */
-/* } */
+/*
+ * Master command router
+ */
+void cluster_route_command(map_t cluster, const char *command, int fd) {
+    char buf[CMD_BUFSIZE];
+    char node_key[3];
+    sprintf(node_key, "%d", fd);
+    void *val = NULL;
+    m_get(cluster, node_key, &val);
+    struct member *node = (struct member *) val;
+    if ((write(node->fd, command, strlen(command))) == -1)
+        perror("WRITE");
+    // wait for answer
+    while(read(node->fd, buf, CMD_BUFSIZE) > 0)
+        printf("%s", buf);
+}
+
+void cluster_send_command(map_t cluster, const char *command) {
+    void *val = NULL;
+    m_get(cluster, "0", &val);
+    struct member *master = (struct member *) val;
+    int fd = master->fd;
+    if ((write(fd, command, strlen(command))) == -1)
+        perror("WRITE");
+}
