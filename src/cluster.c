@@ -1,5 +1,7 @@
 #include "cluster.h"
 #include "partition.h"
+#include "commands.h"
+#include "serializer.h"
 #include "util.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -12,73 +14,13 @@
 
 #define CMD_BUFSIZE 1024
 
-/*
- * Retrieve cluster size and values of members from cluster_members then we
- * have to partition 1024 slots equally
- */
-static void slot_distribution(map_t cluster_members) {
-    h_map* map = (h_map *) cluster_members;
-    int counter = 0;
-    int step = PARTITION_NUMBER / m_length(cluster_members);
-    // iterate through the keyspace
-    for(int i = 0; i < map->table_size; i++)
-        if (map->data[i].in_use != 0) {
-            if (map->data[i].data != NULL) {
-                struct member *m = (struct member *) map->data[i].data;
-                m->min = step * counter;
-                m->max = (m->min + step) - 1;
-                counter++;
-                printf("<*> Node %d has slots -> [%d - %d]\n", m->fd, m->min, m->max);
-            }
-        }
-}
-
-/*
- * Private function needed to add the master node, used by slave nodes
- */
-static void add_master_node(map_t cluster_members, int fd, int min, int max) {
-    struct member *m = (struct member *) malloc(sizeof(struct member));
-    m->min = min;
-    m->max = max;
-    m->fd = fd;
-    m_put(cluster_members, "0", m);
-}
-
-/*
- * Add a new node to the cluster, currently tracked only on master node (temporary)
- */
-void cluster_add_node(map_t cluster_members, int fd) {
-    struct member *m = (struct member *) malloc(sizeof(struct member));
-    m->min = 0;
-    m->max = PARTITION_NUMBER;
-    m->fd = fd;
-    char key[3];
-    sprintf(key, "%d", fd);
-    m_put(cluster_members, key, m);
-    printf("<*> New node joined - cluster size -> %d\n", m_length(cluster_members));
-    slot_distribution(cluster_members);
-    void *val = NULL;
-    m_get(cluster_members, "0", &val);
-    struct member *master = (struct member *) val;
-    char cmd[15];
-    sprintf(cmd, "MASTER %d %d\n", master->min, master->max);
-    h_map* map = (h_map *) cluster_members;
-    for(int i = 0; i < map->table_size; i++) {
-        if (map->data[i].in_use != 0 && (strcmp(map->data[i].key, "0")) != 0) {
-            struct member *curr = (struct member *) map->data[i].data;
-            if ((write(curr->fd, cmd, strlen(cmd))) == -1)
-                perror("WRITE");
-        }
-    }
-}
 
 /*
  * Join the cluster, used by slave nodes to set a connection with the master
  * node
  */
-void cluster_join(map_t cluster_members, const char *hostname, const char *port) {
+void cluster_join(int distributed, partition **buckets, const char *hostname, const char *port) {
     int p = atoi(port);
-    char buf[CMD_BUFSIZE];
     struct sockaddr_in serveraddr;
     struct hostent *server;
     /* socket: create the socket */
@@ -106,44 +48,61 @@ void cluster_join(map_t cluster_members, const char *hostname, const char *port)
         exit(0);
     }
 
-    char cmd[7] = "ADDNODE";
-    /* fcntl(sock_fd, F_SETFL, O_NONBLOCK); */
-    if ((write(sock_fd, cmd, strlen(cmd))) == -1)
-        perror("WRITE");
+    char *buf = (char *) malloc(CMD_BUFSIZE);
+    bzero(buf, CMD_BUFSIZE);
+    int done = 0;
+    int id, slave_number = 0;
 
-    while(read(sock_fd, buf, CMD_BUFSIZE) > 0) {
-        printf("%s", buf);
-        if (strncasecmp(buf, "master", 6) == 0) {
-            int min = to_int(strtok(buf, " "));
-            int max = to_int(strtok(buf, " "));
-            add_master_node(cluster_members, sock_fd, min, max);
+    while(1) {
+        while(read(sock_fd, buf, CMD_BUFSIZE) > 0) {
+            struct message mm = deserialize(buf);
+            char *m = mm.content;
+            if (m[0] == '#') {
+                // first connection, set number of slaves and number assigned
+                id = to_int(m + 1); // first position handle id
+                slave_number = to_int(m + 2); // second position handle slave number
+                printf("<*> Refreshed Node ID: %d and total slaves: %d\n", id, slave_number);
+            } else {
+                printf("<*> Request from master -> %s - %d\n", mm.content, mm.fd);
+                int proc = process_command(distributed, buckets, m, sock_fd, mm.fd);
+                /* int proc = process_command(distributed, buckets, m, mm.fd); */
+                struct message to_be_sent;
+                to_be_sent.fd = mm.fd;
+                switch(proc) {
+                    case MAP_OK:
+                        to_be_sent.content = "* OK\n";
+                        send(sock_fd, serialize(to_be_sent), 13, 0); // 13 = content size + sizeof(int) * 2 for metadata and fd
+                        break;
+                    case MAP_MISSING:
+                        to_be_sent.content = "* NOT FOUND\n";
+                        send(sock_fd, serialize(to_be_sent), 19, 0);
+                        break;
+                    case MAP_FULL:
+                    case MAP_OMEM:
+                        to_be_sent.content = "* OUT OF MEMORY\n";
+                        send(sock_fd, serialize(to_be_sent), 23, 0);
+                        break;
+                    case COMMAND_NOT_FOUND:
+                        to_be_sent.content = "* COMMAND NOT FOUND\n";
+                        send(sock_fd, serialize(to_be_sent), 27, 0);
+                        break;
+                    case END:
+                        done = 1;
+                        break;
+                    default:
+                        continue;
+                        break;
+                }
+                bzero(buf, CMD_BUFSIZE);
+                if (done) {
+                    printf("Closed connection on descriptor %d\n", sock_fd);
+                    /* Closing the descriptor will make epoll remove it from the
+                       set of descriptors which are monitored. */
+                    close(sock_fd);
+                }
+            }
         }
-        bzero(buf, CMD_BUFSIZE);
+        free(buf);
     }
 }
 
-/*
- * Master command router
- */
-void cluster_route_command(map_t cluster, const char *command, int fd) {
-    char buf[CMD_BUFSIZE];
-    char node_key[3];
-    sprintf(node_key, "%d", fd);
-    void *val = NULL;
-    m_get(cluster, node_key, &val);
-    struct member *node = (struct member *) val;
-    if ((write(node->fd, command, strlen(command))) == -1)
-        perror("WRITE");
-    // wait for answer
-    while(read(node->fd, buf, CMD_BUFSIZE) > 0)
-        printf("%s", buf);
-}
-
-void cluster_send_command(map_t cluster, const char *command) {
-    void *val = NULL;
-    m_get(cluster, "0", &val);
-    struct member *master = (struct member *) val;
-    int fd = master->fd;
-    if ((write(fd, command, strlen(command))) == -1)
-        perror("WRITE");
-}

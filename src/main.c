@@ -3,26 +3,23 @@
 #include <pthread.h>
 #include "server.h"
 #include "cluster.h"
+#include "queue.h"
+#include "messagequeue.h"
 
 struct connection {
     const char *address;
     const char *port;
-    map_t *cluster;
+    int distributed;
+    queue *mqueue;
+    partition **buckets;
 };
-
-static void add_master_node(map_t cluster_members, char *key) {
-    struct member *m = (struct member *) malloc(sizeof(struct member));
-    m->min = 0;
-    m->max = PARTITION_NUMBER;
-    m_put(cluster_members, key, m);
-}
 
 static void *cluster_pthread(void *param) {
     struct connection *conn = (struct connection *) param;
-    const char *address = conn->address;
-    const char *port = conn->port;
-    map_t *cluster = conn->cluster;
-    start_server(cluster, address, port);
+    /* const char *address = conn->address; */
+    /* const char *port = conn->port; */
+    queue *mqueue = conn->mqueue;
+    mq_seed_gateway(mqueue);
     return NULL;
 }
 
@@ -30,8 +27,9 @@ static void *cluster_join_pthread(void *param) {
     struct connection *conn = (struct connection *) param;
     const char *address = conn->address;
     const char *port = conn->port;
-    map_t *cluster = conn->cluster;
-    cluster_join(cluster, address, port);
+    partition **buckets = conn->buckets;
+    int distributed = conn->distributed;
+    cluster_join(distributed, buckets, address, port);
     return NULL;
 }
 
@@ -40,10 +38,14 @@ int main(int argc, char **argv) {
     char *port = PORT;
     static pthread_t t;
     int opt;
-    int master = 1;
-    map_t *cluster = m_create();
+    int master = 0;
+    int distributed = 0;
+    queue *mqueue = create_queue();
+    partition **buckets = (partition **) malloc(sizeof(partition) * PARTITION_NUMBER);
+    for (int i = 0; i < PARTITION_NUMBER; i++)
+        buckets[i] = create_partition();
 
-    while((opt = getopt(argc, argv, "a:p:s")) != -1) {
+    while((opt = getopt(argc, argv, "a:p:ms")) != -1) {
         switch(opt) {
             case 'a':
                 address = optarg;
@@ -51,29 +53,39 @@ int main(int argc, char **argv) {
             case 'p':
                 port = optarg;
                 break;
+            case 'm':
+                master = 1;
+                distributed = 1;
+                break;
             case 's':
                 master = 0;
+                distributed = 1;
                 break;
             default:
+                distributed = 0;
+                master = 0;
                 break;
         }
     }
 
     struct connection *conn = (struct connection *) malloc(sizeof(struct connection));
     conn->address = address;
-    conn->port = "9999";
-    conn->cluster = cluster;
+    conn->port = "9898";
+    conn->mqueue = mqueue;
+    conn->buckets = buckets;
+    conn->distributed = distributed;
 
-    if (master == 1) {
-        if (pthread_create(&t, NULL, &cluster_pthread, conn) != 0)
-            perror("ERROR pthread");
-        add_master_node(cluster, "0");
-        start_server(cluster, address, port);
-    } else {
-        if (pthread_create(&t, NULL, &cluster_join_pthread, conn) != 0)
-            perror("ERROR pthread");
-        start_server(cluster, address, port);
-    }
+    if (distributed == 1) {
+        if (master == 1) {
+            if (pthread_create(&t, NULL, &cluster_pthread, conn) != 0)
+                perror("ERROR pthread");
+            start_server(mqueue, 1, distributed, buckets, address, port);
+        } else {
+            if (pthread_create(&t, NULL, &cluster_join_pthread, conn) != 0)
+                perror("ERROR pthread");
+            start_server(mqueue, 0, distributed, buckets, address, port);
+        }
+    } else start_server(mqueue, 0, 0, buckets, address, port);
 
     return 0;
 }

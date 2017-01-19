@@ -1,6 +1,12 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#define GETINT(x) to_int(x)
+#define GETFLOAT(x) to_float(x)
+#define GETDOUBLE(x) to_double(x)
+#define ISINT(x) is_integer(x)
+#define CRC32(c, x) crc32(c, x)
+
 unsigned long crc32(const unsigned char *, unsigned int);
 long long current_timestamp(void);
 void trim(char *);

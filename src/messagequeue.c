@@ -11,85 +11,94 @@
 #include <sys/stat.h>
 #include <sys/epoll.h>
 #include <arpa/inet.h>
-#include <time.h>
 #include <pthread.h>
 #include "util.h"
-#include "server.h"
-#include "partition.h"
-#include "commands.h"
-#include "cluster.h"
-#include "persistence.h"
-#include "networking.h"
+#include "queue.h"
 #include "serializer.h"
+#include "networking.h"
+#include "messagequeue.h"
 
-#define COMMAND_NOT_FOUND (-4)
-#define EXPIRATION_CHECK_INTERVAL (3) // check every 3s
 
-static unsigned int is_checking = 0; /* expire-time-key-check thread flag */
 
-/* Check every key expire time, if any is set, remove the keys that has exceeded
- * their lifetime
- */
-static int check_expire_time(any_t t1, any_t t2) {
-    h_map *m = (h_map *) t1;
-    kv_pair *kv = (kv_pair *) t2;
-    if (m && kv) {
-        if (kv->in_use == 1 && kv->has_expire_time != 0) {
-            long current_ms = current_timestamp();
-            long delta = current_ms - kv->creation_time;
-            if (delta >= kv->expire_time) {
-                trim(kv->key);
-                m_remove(m, kv->key);
-            }
-        }
-    }
-    return 1;
+/* retrieve a valid index to distribute key inside a partitions array */
+static int _hash(char *keystring) {
+
+    unsigned long key = CRC32((unsigned char *) (keystring), strlen(keystring));
+
+    /* Robert Jenkins' 32 bit Mix Function */
+    key += (key << 12);
+    key ^= (key >> 22);
+    key += (key << 4);
+    key ^= (key >> 9);
+    key += (key << 10);
+    key ^= (key >> 2);
+    key += (key << 7);
+    key ^= (key >> 12);
+
+    /* Knuth's Multiplicative Method */
+    key = (key >> 3) * 2654435761;
+
+    return key;
 }
 
-/* daemon to control all expire time of keys in the partitions, iterates through
- * the entire keyspace checking the expire time of every key that has one set
- */
-static void *expire_control_pthread(void *arg) {
-    partition **buckets = (partition **) arg;
-    if (buckets) {
-        while(1) {
-            for (int i = 0; i < PARTITION_NUMBER; i++) {
-                if (buckets[i]->map->size > 0) {
-                    m_iterate(buckets[i]->map, check_expire_time, buckets[i]->map);
-                }
+static void *consume_queue(void *param) {
+    struct consume_params *params = (struct consume_params *) param;
+    int *slaves = params->slaves;
+    int *len = params->len;
+    queue *q = params->q;
+
+    while(1) {
+        if (q->last > 0) {
+            char *deq_mex = (char *) dequeue(q);
+            char *metadata = deq_mex;
+            int sLen = *((int*)metadata) + (sizeof(int) * 2);
+            struct message mm = deserialize(deq_mex);
+            char *des_mex = mm.content;
+            char *command = NULL;
+            command = strtok(des_mex, " \r\n");
+            char *arg_1 = NULL;
+            char *arg_2 = NULL;
+            arg_1 = strtok(command, " ");
+            if (arg_1)
+                arg_2 = arg_1 + strlen(arg_1) + 1;
+            if (arg_2) {
+                char *arg_1_holder = malloc(strlen(arg_1));
+                char *arg_2_holder = malloc(strlen(arg_2));
+                strcpy(arg_1_holder, arg_1);
+                strcpy(arg_2_holder, arg_2);
+                int p_index = _hash(arg_2_holder) % (*len);
+                send(slaves[p_index], deq_mex, sLen, 0);
             }
-            sleep(EXPIRATION_CHECK_INTERVAL);
-        }
+        } else continue;
     }
     return NULL;
 }
 
-// start server instance, by setting hostname
-void start_server(queue *mqueue, int distributed, int master, partition **buckets, const char *host, const char* port) {
-    // partition buckets, every bucket can contain a variable number of
-    // key-value pair
+
+void mq_seed_gateway(queue *mqueue) {
+    // init slaves' fd array
+    int *slaves = (int *) malloc(sizeof(int) * MAX_SLAVES);
+    int last = 0;
+    struct consume_params *params =
+        (struct consume_params *)  malloc(sizeof(struct consume_params));
+    params->q = mqueue;
+    params->slaves = slaves;
+    params->len = &last;
+    // start consuming loop thread
     static pthread_t t;
-    struct stat st;
-    if (stat(PERSISTENCE_LOG, &st) == -1)
-        mkdir(PERSISTENCE_LOG, 0644);
-    // start expiration time checking thread
-    if (is_checking == 0) {
-        if (pthread_create(&t, NULL, &expire_control_pthread, buckets) != 0)
-            perror("ERROR pthread");
-        is_checking = 1;
-    }
-    struct s_handle *handle = create_async_server(host, port);
+    // obtain an handle
+    struct s_handle *handle = create_async_server("127.0.0.1", MQ_PORT);
     int efd = handle->efd;
     int sfd = handle->sfd;
     int s = handle->s;
     struct epoll_event event = handle->event;
     struct epoll_event *events = handle->events;
+    if (pthread_create(&t, NULL, &consume_queue, params) != 0)
+        perror("ERROR pthread");
 
-    /* start the event loop */
     while (1) {
         int n, i;
 
-        /* n = epoll_wait(efd, events, MAX_EVENTS, -1); */
         n = epoll_wait(efd, events, MAX_EVENTS, -1);
         for (i = 0; i < n; i++) {
             if ((events[i].events & EPOLLERR) ||
@@ -147,6 +156,13 @@ void start_server(queue *mqueue, int distributed, int master, partition **bucket
                         perror("epoll_ctl");
                         abort();
                     }
+                    slaves[last++] = infd;
+                    char set_message[4];
+                    sprintf(set_message, "#%d%d", last - 1, last);
+                    struct message set_m;
+                    set_m.content = set_message;
+                    set_m.fd = infd;
+                    send(infd, serialize(set_m), 12, 0); // 12 = content size + sizeof(int) * 2
                 }
                 continue;
             }
@@ -175,39 +191,23 @@ void start_server(queue *mqueue, int distributed, int master, partition **bucket
                         free(buf);
                         break;
                     }
-                    struct message msg;
-                    msg.content = buf;
-                    msg.fd = events[i].data.fd;
-                    char *s_mex = serialize(msg);
-                    if (distributed == 1 && master == 1) enqueue(mqueue, s_mex);
-                    else {
-                        int proc = process_command(distributed, buckets, buf, events[i].data.fd, events[i].data.fd);
-                        switch(proc) {
-                            case MAP_OK:
-                                send(events[i].data.fd, "OK\n", 3, 0);
-                                break;
-                            case MAP_MISSING:
-                                send(events[i].data.fd, "NOT FOUND\n", 10, 0);
-                                break;
-                            case MAP_FULL:
-                            case MAP_OMEM:
-                                send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
-                                break;
-                            case COMMAND_NOT_FOUND:
-                                send(events[i].data.fd, "COMMAND NOT FOUND\n", 18, 0);
-                                break;
-                            case END:
-                                done = 1;
-                                break;
-                            default:
-                                continue;
-                                break;
-                        }
-                        free(buf);
+
+                    struct message mm = deserialize(buf);
+                    char *m = mm.content;
+                    int f = mm.fd;
+                    if (m[0] == '*') {
+                        send(f, m, strlen(m), 0);
                     }
+                    else {
+                        // it should be already serialized
+                        printf("Receiving ");
+                        enqueue(mqueue, buf);
+                    }
+                    free(buf);
                 }
 
                 if (done) {
+                    last--;
                     printf("Closed connection on descriptor %d\n",
                             events[i].data.fd);
                     /* Closing the descriptor will make epoll remove it from the
@@ -217,13 +217,4 @@ void start_server(queue *mqueue, int distributed, int master, partition **bucket
             }
         }
     }
-
-    /* release all partitions */
-    for (int i = 0; i < PARTITION_NUMBER; i++)
-        partition_release(buckets[i]);
-
-    free(events);
-    close(sfd);
-
-    return;
 }
