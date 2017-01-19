@@ -15,7 +15,6 @@
 #include <pthread.h>
 #include "util.h"
 #include "server.h"
-#include "partition.h"
 #include "commands.h"
 #include "cluster.h"
 #include "persistence.h"
@@ -50,13 +49,12 @@ static int check_expire_time(any_t t1, any_t t2) {
  * the entire keyspace checking the expire time of every key that has one set
  */
 static void *expire_control_pthread(void *arg) {
-    partition **buckets = (partition **) arg;
-    if (buckets) {
+    /* partition **buckets = (partition **) arg; */
+    h_map *m = (h_map *) arg;
+    if (m) {
         while(1) {
-            for (int i = 0; i < PARTITION_NUMBER; i++) {
-                if (buckets[i]->map->size > 0) {
-                    m_iterate(buckets[i]->map, check_expire_time, buckets[i]->map);
-                }
+            if (m->size > 0) {
+                m_iterate(m, check_expire_time, m);
             }
             sleep(EXPIRATION_CHECK_INTERVAL);
         }
@@ -65,7 +63,7 @@ static void *expire_control_pthread(void *arg) {
 }
 
 // start server instance, by setting hostname
-void start_server(queue *mqueue, int distributed, int master, partition **buckets, const char *host, const char* port) {
+void start_server(queue *mqueue, int distributed, int master, map_t map, const char *host, const char* port) {
     // partition buckets, every bucket can contain a variable number of
     // key-value pair
     static pthread_t t;
@@ -74,7 +72,7 @@ void start_server(queue *mqueue, int distributed, int master, partition **bucket
         mkdir(PERSISTENCE_LOG, 0644);
     // start expiration time checking thread
     if (is_checking == 0) {
-        if (pthread_create(&t, NULL, &expire_control_pthread, buckets) != 0)
+        if (pthread_create(&t, NULL, &expire_control_pthread, map) != 0)
             perror("ERROR pthread");
         is_checking = 1;
     }
@@ -181,7 +179,7 @@ void start_server(queue *mqueue, int distributed, int master, partition **bucket
                     char *s_mex = serialize(msg);
                     if (distributed == 1 && master == 1) enqueue(mqueue, s_mex);
                     else {
-                        int proc = process_command(distributed, buckets, buf, events[i].data.fd, events[i].data.fd);
+                        int proc = process_command(distributed, map, buf, events[i].data.fd, events[i].data.fd);
                         switch(proc) {
                             case MAP_OK:
                                 send(events[i].data.fd, "OK\n", 3, 0);
@@ -218,9 +216,11 @@ void start_server(queue *mqueue, int distributed, int master, partition **bucket
         }
     }
 
+    if (master && map)
+        m_release(map);
     /* release all partitions */
-    for (int i = 0; i < PARTITION_NUMBER; i++)
-        partition_release(buckets[i]);
+    /* for (int i = 0; i < PARTITION_NUMBER; i++) */
+    /*     partition_release(buckets[i]); */
 
     free(events);
     close(sfd);

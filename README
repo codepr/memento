@@ -11,6 +11,10 @@ redis/memcached to better understand how it works.
 The project is a minimal redis-like implementation with a text based protocol,
 and like redis, can be used as key-value in-memory store, or a basic message
 broker using keys as topic to subscribe to.
+
+It can be spread across a cluster of machines following a very naive approach
+to master-slave distribution
+
 Currently supports some basic operations:
 
 - SET key value               Sets <key> to <value>
@@ -88,6 +92,18 @@ like a normal SUB command.
 Actually the keyspace is distributed across 1024 partitions based on consistent
 hashing of the keys, this way should be simplier to eventually distribute data
 across multiple nodes.
+
+* DISTRIBUTION
+=========================================
+
+Still in development and surely bugged, it currently supports some commands in
+a distributed context, basically when started a node as 'Master' using -m flag,
+it starts a simple message queue server which accept incoming connection from
+all slaves subsequentially started on other nodes of the network. Connecting to
+the master node it is possible to issue commands; they will be enqueued into
+the message queue who also track all slave nodes of the cluster, sending
+commands packed as byte string to the correct node based on the hash of the
+key. No failure handling mechanism yet.
 
 * BUILD
 =========================================

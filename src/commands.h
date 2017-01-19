@@ -1,12 +1,12 @@
 #ifndef COMMANDS_H
 #define COMMANDS_H
 
-#include "partition.h"
+#include "map.h"
 
 typedef enum {OK, PAYLOAD_OK, ITERATE_OK, MISSING, FULL, OOM, COMMAND_NOT_FOUND, END} reply_code;
 
 
-int process_command(int, partition **, char *, int, int);
+int process_command(int, map_t, char *, int, int);
 
 extern const char *commands[];
 extern const char *queries[];
@@ -19,37 +19,35 @@ int enumerates_array_len(void);
 int services_array_len(void);
 
 // Commands
-int set_command(int, partition **, char *);
-int del_command(int, partition **, char *);
-int pub_command(int, partition **, char *);
-int inc_command(int, partition **, char *);
-int incf_command(int, partition **, char *);
-int dec_command(int, partition **, char *);
-int decf_command(int, partition **, char *);
-int append_command(int, partition **, char *);
-int prepend_command(int, partition **, char *);
-int expire_command(int, partition **, char *);
+int set_command(int, map_t, char *);
+int del_command(int, map_t, char *);
+int pub_command(int, map_t, char *);
+int inc_command(int, map_t, char *);
+int incf_command(int, map_t, char *);
+int dec_command(int, map_t, char *);
+int decf_command(int, map_t, char *);
+int append_command(int, map_t, char *);
+int prepend_command(int, map_t, char *);
+int expire_command(int, map_t, char *);
 // Queries
-int get_command(int, partition **, char *, int, int);
-int getp_command(int, partition **, char *, int, int);
-int sub_command(int, partition **, char *, int, int);
-int unsub_command(int, partition **, char *, int, int);
-int tail_command(int, partition **, char *, int, int);
-int prefscan_command(int, partition **, char *, int, int);
-int fuzzyscan_command(int, partition **, char *, int, int);
-int ttl_command(int, partition **, char *, int, int);
+int get_command(int, map_t, char *, int, int);
+int getp_command(int, map_t, char *, int, int);
+int sub_command(int, map_t, char *, int, int);
+int unsub_command(int, map_t, char *, int, int);
+int tail_command(int, map_t, char *, int, int);
+int prefscan_command(int, map_t, char *, int, int);
+int fuzzyscan_command(int, map_t, char *, int, int);
+int ttl_command(int, map_t, char *, int, int);
 // enumerates
-int count_command(int, partition **, int, int);
-int keys_command(int, partition **, int, int);
-int values_command(int, partition **, int, int);
+int count_command(int, map_t, int, int);
+int keys_command(int, map_t, int, int);
+int values_command(int, map_t, int, int);
 // services
-int flush_command(int, partition **);
-// cluster
-int addnode_command(map_t, int, int);
+int flush_command(int, map_t);
 
-extern int (*cmds_func[]) (int, partition **, char *);
-extern int (*qrs_func[]) (int, partition **, char *, int, int);
-extern int (*enum_func[]) (int, partition **, int, int);
-extern int (*srvs_func[]) (int, partition **);
+extern int (*cmds_func[]) (int, map_t, char *);
+extern int (*qrs_func[]) (int, map_t, char *, int, int);
+extern int (*enum_func[]) (int, map_t, int, int);
+extern int (*srvs_func[]) (int, map_t);
 
 #endif

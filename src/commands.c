@@ -1,10 +1,10 @@
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
 #include "commands.h"
 #include "cluster.h"
 #include "serializer.h"
 #include "util.h"
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
 
 /*
  * Array of commands that doesn't need a file descriptor, they exclusively
@@ -55,11 +55,11 @@ int services_array_len(void) {
 
 /*
  * process incoming request from the file descriptor socket represented by
- * sock_fd, buckets is an array of partition, every partition store an instance
+ * sock_fd, map is an array of partition, every partition store an instance
  * of hashmap, keys are distributed through consistent hashing calculated with
  * crc32 % PARTITION_NUMBER
  */
-int process_command(int distributed, partition **buckets, char *buffer, int sock_fd, int resp_fd) {
+int process_command(int distributed, map_t map, char *buffer, int sock_fd, int resp_fd) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
     // in case of empty command return nothing, next additions will be awaiting
@@ -73,25 +73,25 @@ int process_command(int distributed, partition **buckets, char *buffer, int sock
     // check if the buffer contains a command and execute it
     for (int i = 0; i < commands_array_len(); i++) {
         if (strncasecmp(command, commands[i], strlen(command)) == 0) {
-            return (*cmds_func[i])(distributed, buckets, buffer + strlen(command) + 1);
+            return (*cmds_func[i])(distributed, map, buffer + strlen(command) + 1);
         }
     }
     // check if the buffer contains a query and execute it
     for (int i = 0; i < queries_array_len(); i++) {
         if (strncasecmp(command, queries[i], strlen(command)) == 0) {
-            return (*qrs_func[i])(distributed, buckets, buffer + strlen(command) + 1, sock_fd, resp_fd);
+            return (*qrs_func[i])(distributed, map, buffer + strlen(command) + 1, sock_fd, resp_fd);
         }
     }
     // check if the buffer contains an enumeration command and execute it
     for (int i = 0; i < enumerates_array_len(); i++) {
         if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
-            return (*enum_func[i])(distributed, buckets, sock_fd, resp_fd);
+            return (*enum_func[i])(distributed, map, sock_fd, resp_fd);
         }
     }
     // check if the buffer contains a service command and execute it
     for (int i = 0; i < services_array_len(); i++) {
         if (strncasecmp(command, services[i], strlen(command)) == 0) {
-            return (*srvs_func[i])(distributed, buckets);
+            return (*srvs_func[i])(distributed, map);
         }
     }
     return COMMAND_NOT_FOUND;
@@ -101,7 +101,7 @@ int process_command(int distributed, partition **buckets, char *buffer, int sock
 /* Mapping tables to the commands handlers, maintaining the order defined by
  * arrays of commands
  */
-int (*cmds_func[]) (int, partition **, char *) = {
+int (*cmds_func[]) (int, map_t, char *) = {
     &set_command,
     &del_command,
     &pub_command,
@@ -114,7 +114,7 @@ int (*cmds_func[]) (int, partition **, char *) = {
     &expire_command
 };
 
-int (*qrs_func[]) (int, partition **, char *, int, int) = {
+int (*qrs_func[]) (int, map_t, char *, int, int) = {
     &get_command,
     &getp_command,
     &sub_command,
@@ -125,13 +125,13 @@ int (*qrs_func[]) (int, partition **, char *, int, int) = {
     &ttl_command
 };
 
-int (*enum_func[]) (int, partition **, int, int) = {
+int (*enum_func[]) (int, map_t, int, int) = {
     &count_command,
     &keys_command,
     &values_command
 };
 
-int (*srvs_func[]) (int, partition **) = {
+int (*srvs_func[]) (int, map_t) = {
     &flush_command
 };
 
@@ -195,7 +195,6 @@ static int print_keys(any_t t1, any_t t2) {
 static int print_values(any_t t1, any_t t2) {
     kv_pair *kv = (kv_pair *) t2;
     int *fd = (int *) t1;
-
     send(*fd, kv->data, strlen(kv->data), 0);
     return MAP_OK;
 }
@@ -208,8 +207,7 @@ static int print_values(any_t t1, any_t t2) {
  *
  *     SET <key> <value>
  */
-int set_command(int distributed, partition **buckets, char *command) {
-    printf("<*> %s\n", command);
+int set_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -221,8 +219,7 @@ int set_command(int distributed, partition **buckets, char *command) {
         char *arg_2_holder = malloc(strlen((char *) arg_2));
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
-        int p_index = partition_hash(arg_1_holder);
-        ret = m_put(buckets[p_index]->map, arg_1_holder, arg_2_holder);
+        ret = m_put(map, arg_1_holder, arg_2_holder);
     }
     return ret;
 }
@@ -236,15 +233,14 @@ int set_command(int distributed, partition **buckets, char *command) {
  *
  *     GET <key>
  */
-int get_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int get_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        int get = m_get(buckets[p_index]->map, arg_1, &arg_2);
+        int get = m_get(map, arg_1, &arg_2);
         if (get == MAP_OK && arg_2) {
             if (distributed == 1) {
                 struct message m;
@@ -272,15 +268,14 @@ int get_command(int distributed, partition **buckets, char *command, int sock_fd
  *
  *     GETP <key>
  */
-int getp_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int getp_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
         kv_pair *kv = (kv_pair *) malloc(sizeof(kv_pair));
-        int get = m_get_kv_pair(buckets[p_index]->map, arg_1, kv);
+        int get = m_get_kv_pair(map, arg_1, kv);
         if (get == MAP_OK && kv) {
             char *kvstring = (char *) malloc(strlen(kv->key) + strlen((char *) kv->data) + (sizeof(long) * 2) + 40);
             sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %ld\n",
@@ -310,14 +305,13 @@ int getp_command(int distributed, partition **buckets, char *command, int sock_f
  *
  *     DEL <key>
  */
-int del_command(int distributed, partition **buckets, char *command) {
+int del_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     while (arg_1 != NULL) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        ret = m_remove(buckets[p_index]->map, arg_1);
+        ret = m_remove(map, arg_1);
         arg_1 = strtok(NULL, " ");
     }
     return ret;
@@ -332,14 +326,13 @@ int del_command(int distributed, partition **buckets, char *command) {
  *
  *     SUB <key1> <key2> .. <keyN>
  */
-int sub_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int sub_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     while (arg_1 != NULL) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        ret = m_sub(buckets[p_index]->map, arg_1, sock_fd);
+        ret = m_sub(map, arg_1, sock_fd);
         arg_1 = strtok(NULL, " ");
     }
     return ret;
@@ -354,14 +347,13 @@ int sub_command(int distributed, partition **buckets, char *command, int sock_fd
  *
  *     UNSUB <key1> <key2> .. <keyN>
  */
-int unsub_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int unsub_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     while (arg_1 != NULL) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        ret = m_unsub(buckets[p_index]->map, arg_1, sock_fd);
+        ret = m_unsub(map, arg_1, sock_fd);
         arg_1 = strtok(NULL, " ");
     }
     return ret;
@@ -378,7 +370,7 @@ int unsub_command(int distributed, partition **buckets, char *command, int sock_
  *
  *     PUB <key> <value>
  */
-int pub_command(int distributed, partition **buckets, char *command) {
+int pub_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -389,8 +381,7 @@ int pub_command(int distributed, partition **buckets, char *command) {
         char *arg_2_holder = malloc(strlen((char *) arg_2));
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
-        int p_index = partition_hash(arg_1_holder);
-        ret = m_pub(buckets[p_index]->map, arg_1_holder, arg_2_holder);
+        ret = m_pub(map, arg_1_holder, arg_2_holder);
     }
     return ret;
 }
@@ -406,15 +397,14 @@ int pub_command(int distributed, partition **buckets, char *command) {
  *     INC <key>   // +1 to <key>
  *     INC <key> 5 // +5 to <key>
  */
-int inc_command(int distributed, partition **buckets, char *command) {
+int inc_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+        ret = m_get(map, arg_1, &arg_2);
         if (ret == MAP_OK && arg_2) {
             char *s = (char *) arg_2;
             if (ISINT(s) == 1) {
@@ -441,15 +431,14 @@ int inc_command(int distributed, partition **buckets, char *command) {
  *     INCF <key>     // +1.0 to <key>
  *     INCF <key> 5.0 // +5.0 to <key>
  */
-int incf_command(int distributed, partition **buckets, char *command) {
+int incf_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+        ret = m_get(map, arg_1, &arg_2);
         if (ret == MAP_OK && arg_2) {
             char *s = (char *) arg_2;
             if (is_float(s) == 1) {
@@ -476,15 +465,14 @@ int incf_command(int distributed, partition **buckets, char *command) {
  *     DEC <key>   // -1 to <key>
  *     DEC <key> 5 // -5 to <key>
  */
-int dec_command(int distributed, partition **buckets, char *command) {
+int dec_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+        ret = m_get(map, arg_1, &arg_2);
         if (ret == MAP_OK && arg_2) {
             char *s = (char *) arg_2;
             if(ISINT(s) == 1) {
@@ -511,15 +499,14 @@ int dec_command(int distributed, partition **buckets, char *command) {
  *     DECF <key>     // -1.0 to <key>
  *     DECF <key> 5.0 // -5.0 to <key>
  */
-int decf_command(int distributed, partition **buckets, char *command) {
+int decf_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
-        ret = m_get(buckets[p_index]->map, arg_1, &arg_2);
+        ret = m_get(map, arg_1, &arg_2);
         if (ret == MAP_OK && arg_2) {
             char *s = (char *) arg_2;
             if(is_float(s) == 1) {
@@ -541,10 +528,9 @@ int decf_command(int distributed, partition **buckets, char *command) {
  *
  * Doesn't require any argument.
  */
-int count_command(int distributed, partition **buckets, int sock_fd, int resp_fd) {
+int count_command(int distributed, map_t map, int sock_fd, int resp_fd) {
     int len = 0;
-    for (int i = 0; i < PARTITION_NUMBER; i++)
-        len += m_length(buckets[i]->map);
+    len += m_length(map);
     char c_len[24];
     sprintf(c_len, "%d\n", len);
     send(sock_fd, c_len, 24, 0);
@@ -557,10 +543,10 @@ int count_command(int distributed, partition **buckets, int sock_fd, int resp_fd
  *
  * Doesn't require any argument.
  */
-int keys_command(int distributed, partition **buckets, int sock_fd, int resp_fd) {
-    for (int i = 0; i < PARTITION_NUMBER; i++)
-        if (buckets[i]->map->size > 0)
-            m_iterate(buckets[i]->map, print_keys, &sock_fd);
+int keys_command(int distributed, map_t map, int sock_fd, int resp_fd) {
+    h_map *m = (h_map *) map;
+    if (m->size > 0)
+        m_iterate(map, print_keys, &sock_fd);
     return 1;
 }
 
@@ -570,10 +556,10 @@ int keys_command(int distributed, partition **buckets, int sock_fd, int resp_fd)
  *
  * Doesn't require any argument.
  */
-int values_command(int distributed, partition **buckets, int sock_fd, int resp_fd) {
-    for (int i = 0; i < PARTITION_NUMBER; i++)
-        if (buckets[i]->map->size > 0)
-            m_iterate(buckets[i]->map, print_values, &sock_fd);
+int values_command(int distributed, map_t map, int sock_fd, int resp_fd) {
+    h_map *m = (h_map *) map;
+    if (m->size > 0)
+        m_iterate(map, print_values, &sock_fd);
     return 1;
 }
 
@@ -588,7 +574,7 @@ int values_command(int distributed, partition **buckets, int sock_fd, int resp_f
  *     TAIL <key>
  *     TAIL <key> 5 // leap through the first 5 messages
  */
-int tail_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int tail_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -601,8 +587,7 @@ int tail_command(int distributed, partition **buckets, char *command, int sock_f
         strcpy(arg_2_holder, arg_2);
         if (ISINT(arg_2_holder)) {
             int i = GETINT(arg_2_holder);
-            int p_index = partition_hash(arg_1_holder);
-            m_sub_from(buckets[p_index]->map, arg_1, sock_fd, i);
+            m_sub_from(map, arg_1, sock_fd, i);
             ret = 1;
         } else ret = -1;
     } else ret = MAP_MISSING;
@@ -618,18 +603,17 @@ int tail_command(int distributed, partition **buckets, char *command, int sock_f
  *
  *     PREFSCAN <keyprefix>
  */
-int prefscan_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int prefscan_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
         int flag = 0;
-        for (int i = 0; i < PARTITION_NUMBER; i++) {
-            if (buckets[i]->map->size > 0) {
-                ret = m_prefscan(buckets[i]->map, find_prefix, arg_1, sock_fd);
-                if (ret == MAP_OK) flag = 1;
-            }
+        h_map *m = (h_map *) map;
+        if (m->size > 0) {
+            ret = m_prefscan(map, find_prefix, arg_1, sock_fd);
+            if (ret == MAP_OK) flag = 1;
         }
         if (flag == 1) ret = 1;
     } else ret = MAP_MISSING;
@@ -645,26 +629,26 @@ int prefscan_command(int distributed, partition **buckets, char *command, int so
  *
  *     FUZZYSCAN <keyprefix>
  */
-int fuzzyscan_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int fuzzyscan_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
         int flag = 0;
-        for (int i = 0; i < PARTITION_NUMBER; i++) {
-            if (buckets[i]->map->size > 0) {
-                ret = m_fuzzyscan(buckets[i]->map, find_fuzzy_pattern, arg_1, sock_fd);
-                if (ret == MAP_OK) flag = 1;
-            }
+        h_map *m = (h_map *) map;
+        if (m->size > 0) {
+            ret = m_fuzzyscan(map, find_fuzzy_pattern, arg_1, sock_fd);
+            if (ret == MAP_OK) flag = 1;
         }
+        /* } */
         if (flag == 1) ret = 1;
-    }
-    return ret;
+}
+return ret;
 }
 
 /*
- * APPEND command handler, finds the partition inside the partitions array using
+ * APPEND command handler, finds the map_tinside the partitions array using
  * CRC32 and append a suffix to the value associated to the found key, returning
  * MISSING reply code if no key were found.
  *
@@ -672,7 +656,7 @@ int fuzzyscan_command(int distributed, partition **buckets, char *command, int s
  *
  *     APPEND <key> <value>
  */
-int append_command(int distributed, partition **buckets, char *command) {
+int append_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -683,20 +667,19 @@ int append_command(int distributed, partition **buckets, char *command) {
         char *arg_2_holder = malloc(strlen((char *) arg_2));
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
-        int p_index = partition_hash(arg_1_holder);
         void *val = NULL;
-        ret = m_get(buckets[p_index]->map, arg_1_holder, &val);
+        ret = m_get(map, arg_1_holder, &val);
         if (ret == MAP_OK) {
             remove_newline(val);
             char *append = append_string(val, arg_2_holder);
-            ret = m_put(buckets[p_index]->map, arg_1_holder, append);
+            ret = m_put(map, arg_1_holder, append);
         }
     } else ret = MAP_MISSING;
     return ret;
 }
 
 /*
- * PREPEND command handler, finds the partition inside the partitions array using
+ * PREPEND command handler, finds the map_tinside the partitions array using
  * CRC32 and prepend a prefix to the value associated to the found key, returning
  * MISSING reply code if no key were found.
  *
@@ -704,7 +687,7 @@ int append_command(int distributed, partition **buckets, char *command) {
  *
  *     PREPEND <key> <value>
  */
-int prepend_command(int distributed, partition **buckets, char *command) {
+int prepend_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -715,13 +698,12 @@ int prepend_command(int distributed, partition **buckets, char *command) {
         char *arg_2_holder = malloc(strlen((char *) arg_2));
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
-        int p_index = partition_hash(arg_1_holder);
         void *val = NULL;
-        ret = m_get(buckets[p_index]->map, arg_1_holder, &val);
+        ret = m_get(map, arg_1_holder, &val);
         if (ret == MAP_OK) {
             remove_newline(arg_2_holder);
             char *append = append_string(arg_2_holder, val);
-            ret = m_put(buckets[p_index]->map, arg_1_holder, append);
+            ret = m_put(map, arg_1_holder, append);
         }
     } else ret = MAP_MISSING;
     return ret;
@@ -735,7 +717,7 @@ int prepend_command(int distributed, partition **buckets, char *command) {
  *
  *     EXPIRE <key> <ms>
  */
-int expire_command(int distributed, partition **buckets, char *command) {
+int expire_command(int distributed, map_t map, char *command) {
     int ret = 0;
     char *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -746,8 +728,7 @@ int expire_command(int distributed, partition **buckets, char *command) {
         char *arg_2_holder = malloc(strlen((char *) arg_2));
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
-        int p_index = partition_hash(arg_1_holder);
-        ret = m_set_expire_time(buckets[p_index]->map, arg_1_holder, (long) GETINT(arg_2_holder));
+        ret = m_set_expire_time(map, arg_1_holder, (long) GETINT(arg_2_holder));
     } else ret = MAP_MISSING;
     return ret;
 }
@@ -760,14 +741,13 @@ int expire_command(int distributed, partition **buckets, char *command) {
  *
  *     TTL <key>
  */
-int ttl_command(int distributed, partition **buckets, char *command, int sock_fd, int resp_fd) {
+int ttl_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
     char *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int p_index = partition_hash(arg_1);
         kv_pair *kv = (kv_pair *) malloc(sizeof(kv_pair));
-        int get = m_get_kv_pair(buckets[p_index]->map, arg_1, kv);
+        int get = m_get_kv_pair(map, arg_1, kv);
         if (get == MAP_OK && kv) {
             char ttl[7];
             if (kv->has_expire_time)
@@ -785,16 +765,9 @@ int ttl_command(int distributed, partition **buckets, char *command, int sock_fd
  *
  * Doesn't require any argument.
  */
-int flush_command(int distributed, partition **buckets) {
-    for (int i = 0; i < PARTITION_NUMBER; i++) {
-        partition_release(buckets[i]);
-        buckets[i] = create_partition();
-    }
+int flush_command(int distributed, map_t map) {
+    if (map != NULL)
+        m_release(map);
     return OK;
 }
 
-// cluster add node command
-/* int addnode_command(map_t cluster, int fd) { */
-/*     #<{(| cluster_add_node(cluster, fd); |)}># */
-/*     return OK; */
-/* } */

@@ -6,6 +6,7 @@
 #define GETDOUBLE(x) to_double(x)
 #define ISINT(x) is_integer(x)
 #define CRC32(c, x) crc32(c, x)
+#define RANDBETWEEN(A,B) A + rand()/(RAND_MAX/(B - A))
 
 unsigned long crc32(const unsigned char *, unsigned int);
 long long current_timestamp(void);

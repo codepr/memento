@@ -14,39 +14,19 @@
 #include <pthread.h>
 #include "util.h"
 #include "queue.h"
+#include "hashing.h"
 #include "serializer.h"
 #include "networking.h"
 #include "messagequeue.h"
 
 
 
-/* retrieve a valid index to distribute key inside a partitions array */
-static int _hash(char *keystring) {
-
-    unsigned long key = CRC32((unsigned char *) (keystring), strlen(keystring));
-
-    /* Robert Jenkins' 32 bit Mix Function */
-    key += (key << 12);
-    key ^= (key >> 22);
-    key += (key << 4);
-    key ^= (key >> 9);
-    key += (key << 10);
-    key ^= (key >> 2);
-    key += (key << 7);
-    key ^= (key >> 12);
-
-    /* Knuth's Multiplicative Method */
-    key = (key >> 3) * 2654435761;
-
-    return key;
-}
-
 static void *consume_queue(void *param) {
     struct consume_params *params = (struct consume_params *) param;
     int *slaves = params->slaves;
     int *len = params->len;
     queue *q = params->q;
-
+    uint32_t seed = RANDBETWEEN(0, 32768);
     while(1) {
         if (q->last > 0) {
             char *deq_mex = (char *) dequeue(q);
@@ -55,19 +35,19 @@ static void *consume_queue(void *param) {
             struct message mm = deserialize(deq_mex);
             char *des_mex = mm.content;
             char *command = NULL;
-            command = strtok(des_mex, " \r\n");
+            command = strtok(des_mex, " \n");
+            printf("Command : %s\n", command);
             char *arg_1 = NULL;
-            char *arg_2 = NULL;
-            arg_1 = strtok(command, " ");
-            if (arg_1)
-                arg_2 = arg_1 + strlen(arg_1) + 1;
-            if (arg_2) {
+            /* char *arg_2 = NULL; */
+            arg_1 = strtok(NULL, " ");
+            printf("Arg1 : %s\n", arg_1);
+            if (arg_1) {
                 char *arg_1_holder = malloc(strlen(arg_1));
-                char *arg_2_holder = malloc(strlen(arg_2));
                 strcpy(arg_1_holder, arg_1);
-                strcpy(arg_2_holder, arg_2);
-                int p_index = _hash(arg_2_holder) % (*len);
-                send(slaves[p_index], deq_mex, sLen, 0);
+                trim(arg_1_holder);
+                int idx = murmur3_32((const uint8_t *)arg_1_holder, strlen(arg_1_holder), seed) % (*len);
+                printf("Hash of key %s with len %d is %d\n", arg_1_holder, (*len), idx);
+                send(slaves[idx], deq_mex, sLen, 0);
             }
         } else continue;
     }

@@ -1,8 +1,8 @@
 #ifndef CLUSTER_H
 #define CLUSTER_H
 
-#include "partition.h"
+#include "map.h"
 
-void cluster_join(int, partition **, const char *, const char *);
+void cluster_join(int, map_t, const char *, const char *);
 
 #endif

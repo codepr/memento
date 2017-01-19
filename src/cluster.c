@@ -1,8 +1,3 @@
-#include "cluster.h"
-#include "partition.h"
-#include "commands.h"
-#include "serializer.h"
-#include "util.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -11,6 +6,11 @@
 #include <string.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include "cluster.h"
+#include "commands.h"
+#include "serializer.h"
+#include "util.h"
+
 
 #define CMD_BUFSIZE 1024
 
@@ -19,7 +19,7 @@
  * Join the cluster, used by slave nodes to set a connection with the master
  * node
  */
-void cluster_join(int distributed, partition **buckets, const char *hostname, const char *port) {
+void cluster_join(int distributed, map_t map, const char *hostname, const char *port) {
     int p = atoi(port);
     struct sockaddr_in serveraddr;
     struct hostent *server;
@@ -64,7 +64,7 @@ void cluster_join(int distributed, partition **buckets, const char *hostname, co
                 printf("<*> Refreshed Node ID: %d and total slaves: %d\n", id, slave_number);
             } else {
                 printf("<*> Request from master -> %s - %d\n", mm.content, mm.fd);
-                int proc = process_command(distributed, buckets, m, sock_fd, mm.fd);
+                int proc = process_command(distributed, map, m, sock_fd, mm.fd);
                 /* int proc = process_command(distributed, buckets, m, mm.fd); */
                 struct message to_be_sent;
                 to_be_sent.fd = mm.fd;
@@ -75,16 +75,16 @@ void cluster_join(int distributed, partition **buckets, const char *hostname, co
                         break;
                     case MAP_MISSING:
                         to_be_sent.content = "* NOT FOUND\n";
-                        send(sock_fd, serialize(to_be_sent), 19, 0);
+                        send(sock_fd, serialize(to_be_sent), 20, 0);
                         break;
                     case MAP_FULL:
                     case MAP_OMEM:
                         to_be_sent.content = "* OUT OF MEMORY\n";
-                        send(sock_fd, serialize(to_be_sent), 23, 0);
+                        send(sock_fd, serialize(to_be_sent), 24, 0);
                         break;
                     case COMMAND_NOT_FOUND:
                         to_be_sent.content = "* COMMAND NOT FOUND\n";
-                        send(sock_fd, serialize(to_be_sent), 27, 0);
+                        send(sock_fd, serialize(to_be_sent), 28, 0);
                         break;
                     case END:
                         done = 1;
