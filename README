@@ -114,6 +114,10 @@ TCP client
 
     $ ./shibui -a <hostname> -p <port>
 
+-m define master node in a distributed context
+
+    $ ./shibui -a <hostname> -p <port> -m
+
 Parameter <hostname> and <port> fallback to 127.0.0.1 and 6737, shibui can also be
 started as a slave node by specifying the master
 
