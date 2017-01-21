@@ -24,6 +24,8 @@
 
 #include "map.h"
 
+#define CMD_BUFSIZE 1024
+
 void cluster_join(int, map_t, const char *, const char *);
 
 #endif

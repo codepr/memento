@@ -22,10 +22,14 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <signal.h>
+#include <unistd.h>
 #include "server.h"
 #include "cluster.h"
 #include "queue.h"
 #include "messagequeue.h"
+
+volatile sig_atomic_t running = 1;
 
 struct connection {
     const char *address;
@@ -35,10 +39,19 @@ struct connection {
     map_t map;
 };
 
+
+void stop(int signum) {
+    running = 0;
+    exit(0);
+}
+
+
 static void *cluster_pthread(void *param) {
     struct connection *conn = (struct connection *) param;
     queue *mqueue = conn->mqueue;
-    mq_seed_gateway(mqueue);
+    map_t map = conn->map;
+    int distributed = conn->distributed;
+    mq_seed_gateway(mqueue, distributed, map );
     return NULL;
 }
 
@@ -52,8 +65,10 @@ static void *cluster_join_pthread(void *param) {
     return NULL;
 }
 
+
 int main(int argc, char **argv) {
-    srand((unsigned int)time(NULL));
+    srand((unsigned int) time(NULL));
+    signal(SIGINT, stop);
     char *address = "127.0.0.1";
     char *port = PORT;
     static pthread_t t;
@@ -88,7 +103,7 @@ int main(int argc, char **argv) {
 
     struct connection *conn = (struct connection *) malloc(sizeof(struct connection));
     conn->address = address;
-    conn->port = "9898";
+    conn->port = MQ_PORT;
     conn->mqueue = mqueue;
     conn->map = map;
     conn->distributed = distributed;
@@ -101,7 +116,7 @@ int main(int argc, char **argv) {
         } else {
             if (pthread_create(&t, NULL, &cluster_join_pthread, conn) != 0)
                 perror("ERROR pthread");
-            start_server(mqueue, 0, distributed, map, address, port);
+            while(1) {}
         }
     } else start_server(mqueue, 0, 0, map, address, port);
 

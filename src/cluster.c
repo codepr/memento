@@ -33,9 +33,6 @@
 #include "util.h"
 
 
-#define CMD_BUFSIZE 1024
-
-
 /*
  * Join the cluster, used by slave nodes to set a connection with the master
  * node
@@ -69,6 +66,9 @@ void cluster_join(int distributed, map_t map, const char *hostname, const char *
         exit(0);
     }
 
+    // join request
+    send(sock_fd, "^", 1, 0);
+
     char *buf = (char *) malloc(CMD_BUFSIZE);
     bzero(buf, CMD_BUFSIZE);
     int done = 0;
@@ -82,30 +82,32 @@ void cluster_join(int distributed, map_t map, const char *hostname, const char *
                 // first connection, set number of slaves and number assigned
                 id = to_int(m + 1); // first position handle id
                 slave_number = to_int(m + 2); // second position handle slave number
-                printf("<*> Refreshed Node ID: %d and total slaves: %d\n", id, slave_number);
+                LOG("Refreshed Node ID: %d and total slaves: %d\n", id, slave_number);
             } else {
-                printf("<*> Request from master -> %s - %d\n", mm.content, mm.fd);
+                LOG("Request from master -> %s - %d\n", mm.content, mm.fd);
                 int proc = process_command(distributed, map, m, sock_fd, mm.fd);
-                /* int proc = process_command(distributed, buckets, m, mm.fd); */
                 struct message to_be_sent;
                 to_be_sent.fd = mm.fd;
+                size_t meta_len = sizeof(int) * 2;
+                size_t data_len = meta_len;
+
                 switch(proc) {
                     case MAP_OK:
-                        to_be_sent.content = "* OK\n";
-                        send(sock_fd, serialize(to_be_sent), 13, 0); // 13 = content size + sizeof(int) * 2 for metadata and fd
+                        to_be_sent.content = S_D_OK;
+                        data_len += sizeof(S_D_OK);
                         break;
                     case MAP_MISSING:
-                        to_be_sent.content = "* NOT FOUND\n";
-                        send(sock_fd, serialize(to_be_sent), 20, 0);
+                        to_be_sent.content = S_D_NIL;
+                        data_len += sizeof(S_D_NIL);
                         break;
                     case MAP_FULL:
                     case MAP_OMEM:
-                        to_be_sent.content = "* OUT OF MEMORY\n";
-                        send(sock_fd, serialize(to_be_sent), 24, 0);
+                        to_be_sent.content = S_D_OOM;
+                        data_len += sizeof(S_D_OOM);
                         break;
                     case COMMAND_NOT_FOUND:
-                        to_be_sent.content = "* COMMAND NOT FOUND\n";
-                        send(sock_fd, serialize(to_be_sent), 28, 0);
+                        to_be_sent.content = S_D_UNK;
+                        data_len += sizeof(S_D_UNK);
                         break;
                     case END:
                         done = 1;
@@ -114,9 +116,13 @@ void cluster_join(int distributed, map_t map, const char *hostname, const char *
                         continue;
                         break;
                 }
+
+                // send out data
+                send(sock_fd, serialize(to_be_sent), data_len, 0);
+
                 bzero(buf, CMD_BUFSIZE);
                 if (done) {
-                    printf("Closed connection on descriptor %d\n", sock_fd);
+                    LOG("Closed connection on descriptor %d\n", sock_fd);
                     /* Closing the descriptor will make epoll remove it from the
                        set of descriptors which are monitored. */
                     close(sock_fd);

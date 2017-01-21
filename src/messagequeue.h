@@ -22,9 +22,11 @@
 #ifndef MESSAGEQUEUE_H
 #define MESSAGEQUEUE_H
 
+#include "map.h"
 #include "queue.h"
 
 #define MQ_PORT "9898"
+#define MQ_SPORT "19898"
 #define MAX_SLAVES (32)
 
 
@@ -34,8 +36,13 @@ struct consume_params {
     queue *q;
 };
 
+struct redirect_params {
+    int fd;
+    queue *q;
+};
 
-void mq_seed_gateway(queue *);
+
+void mq_seed_gateway(queue *, int, map_t);
 
 
 #endif

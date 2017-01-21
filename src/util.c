@@ -23,6 +23,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <sys/time.h>
+#include <time.h>
 #include "util.h"
 
 
@@ -199,3 +200,19 @@ double to_double(const char *s) {
     if (sscanf(s, "%lf", &dnum) == 1) return dnum;
     return 0.0;
 }
+
+
+void s_log(const char *info, ...) {
+    va_list argptr;
+    va_start(argptr, info);
+    char time_buff[100];
+    time_t now = time(0);
+    strftime(time_buff, 100, " [%Y-%m-%d %H:%M:%S] - ", localtime(&now));
+    char content[strlen(info) + strlen(time_buff)];
+    memset(content, 0x00, strlen(content));
+    strcat(content, time_buff);
+    strcat(content, info);
+    vfprintf(stdout, content, argptr);
+    va_end(argptr);
+}
+

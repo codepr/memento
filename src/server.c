@@ -147,10 +147,10 @@ void start_server(queue *mqueue, int distributed, int master, map_t map, const c
                             sbuf, sizeof sbuf,
                             NI_NUMERICHOST | NI_NUMERICSERV);
                     if (s == 0) {
-                        char time_buff[100];
-                        time_t now = time(0);
-                        strftime(time_buff, 100, "<*> [%Y-%m-%d %H:%M:%S]", localtime(&now));
-                        printf("%s - New connection from %s:%s on descriptor %d \n", time_buff,  hbuf, sbuf, infd);
+                        /* char time_buff[100]; */
+                        /* time_t now = time(0); */
+                        /* strftime(time_buff, 100, "<*> [%Y-%m-%d %H:%M:%S]", localtime(&now)); */
+                        LOG("New connection from %s:%s on descriptor %d \n", hbuf, sbuf, infd);
                     }
 
                     /* Make the incoming socket non-blocking and add it to the
@@ -198,22 +198,27 @@ void start_server(queue *mqueue, int distributed, int master, map_t map, const c
                     msg.content = buf;
                     msg.fd = events[i].data.fd;
                     char *s_mex = serialize(msg);
-                    if (distributed == 1 && master == 1) enqueue(mqueue, s_mex);
+                    if (distributed == 1 && master == 1) {
+                        int check = check_command(buf); // FIXME repeated code
+                        if (check == 1)
+                            enqueue(mqueue, s_mex);
+                        else send(events[i].data.fd, S_UNK, sizeof(S_UNK), 0);
+                    }
                     else {
                         int proc = process_command(distributed, map, buf, events[i].data.fd, events[i].data.fd);
                         switch(proc) {
                             case MAP_OK:
-                                send(events[i].data.fd, "OK\n", 3, 0);
+                                send(events[i].data.fd, S_OK, sizeof(S_OK), 0);
                                 break;
                             case MAP_MISSING:
-                                send(events[i].data.fd, "NOT FOUND\n", 10, 0);
+                                send(events[i].data.fd, S_NIL, sizeof(S_NIL), 0);
                                 break;
                             case MAP_FULL:
                             case MAP_OMEM:
-                                send(events[i].data.fd, "OUT OF MEMORY\n", 14, 0);
+                                send(events[i].data.fd, S_OOM, sizeof(S_OOM), 0);
                                 break;
                             case COMMAND_NOT_FOUND:
-                                send(events[i].data.fd, "COMMAND NOT FOUND\n", 18, 0);
+                                send(events[i].data.fd, S_UNK, sizeof(S_UNK), 0);
                                 break;
                             case END:
                                 done = 1;
@@ -227,7 +232,7 @@ void start_server(queue *mqueue, int distributed, int master, map_t map, const c
                 }
 
                 if (done) {
-                    printf("Closed connection on descriptor %d\n",
+                    LOG("Closed connection on descriptor %d\n",
                             events[i].data.fd);
                     /* Closing the descriptor will make epoll remove it from the
                        set of descriptors which are monitored. */
@@ -239,12 +244,7 @@ void start_server(queue *mqueue, int distributed, int master, map_t map, const c
 
     if (master && map)
         m_release(map);
-    /* release all partitions */
-    /* for (int i = 0; i < PARTITION_NUMBER; i++) */
-    /*     partition_release(buckets[i]); */
 
     free(events);
     close(sfd);
-
-    return;
 }

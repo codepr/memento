@@ -22,6 +22,8 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdarg.h>
+
 #define GETINT(x) to_int(x)
 #define GETFLOAT(x) to_float(x)
 #define GETDOUBLE(x) to_double(x)
@@ -36,5 +38,9 @@ int is_integer(const char *);
 int is_float(const char *);
 int to_int(const char *);
 double to_double(const char *);
+
+void s_log(const char *, ...);
+
+#define LOG(...) s_log( __VA_ARGS__ )
 
 #endif

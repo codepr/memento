@@ -41,7 +41,7 @@ struct message deserialize(char *serialized_msg) {
     char* fd = metadata + sizeof(int);
     char* content = fd + sizeof(int);
     struct message msg;
-    int s_len = *((int*)metadata);
+    int s_len = *((int*) metadata);
     msg.fd = *((int*) fd);
     msg.content = malloc((s_len + 1) * sizeof(char));
     strncpy(msg.content, content, s_len);

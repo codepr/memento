@@ -74,6 +74,42 @@ int services_array_len(void) {
     return sizeof(services) / sizeof(char *);
 }
 
+
+int check_command(char *buffer) {
+    char *command = strtok(buffer, " \r\n");
+
+    // in case of 'QUIT' or 'EXIT' close the connection
+    if (strncasecmp(command, "quit", strlen(command)) == 0 || strncasecmp(command, "exit", strlen(command)) == 0)
+        return END;
+
+    // check if the buffer contains a command and execute it
+    for (int i = 0; i < commands_array_len(); i++) {
+        if (strncasecmp(command, commands[i], strlen(command)) == 0) {
+            return 1;
+        }
+    }
+    // check if the buffer contains a query and execute it
+    for (int i = 0; i < queries_array_len(); i++) {
+        if (strncasecmp(command, queries[i], strlen(command)) == 0) {
+            return 1;
+        }
+    }
+    // check if the buffer contains an enumeration command and execute it
+    for (int i = 0; i < enumerates_array_len(); i++) {
+        if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
+            return 1;
+        }
+    }
+    // check if the buffer contains a service command and execute it
+    for (int i = 0; i < services_array_len(); i++) {
+        if (strncasecmp(command, services[i], strlen(command)) == 0) {
+            return 1;
+        }
+    }
+    return COMMAND_NOT_FOUND;
+}
+
+
 /*
  * process incoming request from the file descriptor socket represented by
  * sock_fd, map is an array of partition, every partition store an instance

@@ -24,8 +24,21 @@
 
 #include "map.h"
 
+#define S_NIL "(null)\r\n"
+#define S_OK "OK\r\n"
+#define S_OOM "(Out of memory)\r\n"
+#define S_UNK "(Unknown command)\r\n"
+#define S_D_NIL "* (null)\r\n"
+#define S_D_OK "* OK\r\n"
+#define S_D_OOM "* (Out of memory)\r\n"
+#define S_D_UNK "* (Unknown command)\r\n"
+
+
+
 typedef enum {OK, PAYLOAD_OK, ITERATE_OK, MISSING, FULL, OOM, COMMAND_NOT_FOUND, END} reply_code;
 
+
+int check_command(char *);
 
 int process_command(int, map_t, char *, int, int);
 
