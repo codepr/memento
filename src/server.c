@@ -70,7 +70,6 @@ static int check_expire_time(any_t t1, any_t t2) {
  * the entire keyspace checking the expire time of every key that has one set
  */
 static void *expire_control_pthread(void *arg) {
-    /* partition **buckets = (partition **) arg; */
     h_map *m = (h_map *) arg;
     if (m) {
         while(1) {
@@ -107,8 +106,6 @@ void start_server(queue *mqueue, int distributed, int master, map_t map, const c
     /* start the event loop */
     while (1) {
         int n, i;
-
-        /* n = epoll_wait(efd, events, MAX_EVENTS, -1); */
         n = epoll_wait(efd, events, MAX_EVENTS, -1);
         for (i = 0; i < n; i++) {
             if ((events[i].events & EPOLLERR) ||
@@ -146,12 +143,9 @@ void start_server(queue *mqueue, int distributed, int master, map_t map, const c
                             hbuf, sizeof hbuf,
                             sbuf, sizeof sbuf,
                             NI_NUMERICHOST | NI_NUMERICSERV);
-                    if (s == 0) {
-                        /* char time_buff[100]; */
-                        /* time_t now = time(0); */
-                        /* strftime(time_buff, 100, "<*> [%Y-%m-%d %H:%M:%S]", localtime(&now)); */
-                        LOG("New connection from %s:%s on descriptor %d \n", hbuf, sbuf, infd);
-                    }
+                    if (s == 0)
+                        LOG("New connection from %s:%s\r\n", hbuf, sbuf);
+
 
                     /* Make the incoming socket non-blocking and add it to the
                        list of fds to monitor. */
@@ -232,7 +226,7 @@ void start_server(queue *mqueue, int distributed, int master, map_t map, const c
                 }
 
                 if (done) {
-                    LOG("Closed connection on descriptor %d\n",
+                    LOG("Closed connection on descriptor %d\r\n",
                             events[i].data.fd);
                     /* Closing the descriptor will make epoll remove it from the
                        set of descriptors which are monitored. */

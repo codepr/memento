@@ -49,9 +49,7 @@ void stop(int signum) {
 static void *cluster_pthread(void *param) {
     struct connection *conn = (struct connection *) param;
     queue *mqueue = conn->mqueue;
-    map_t map = conn->map;
-    int distributed = conn->distributed;
-    mq_seed_gateway(mqueue, distributed, map );
+    mq_seed_gateway(mqueue);
     return NULL;
 }
 

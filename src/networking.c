@@ -19,7 +19,6 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "networking.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -33,6 +32,8 @@
 #include <sys/stat.h>
 #include <sys/epoll.h>
 #include <arpa/inet.h>
+#include "networking.h"
+#include "util.h"
 
 
 // set non-blocking socket
@@ -130,8 +131,8 @@ struct s_handle *create_async_server(const char *host, const char *port) {
     events = calloc(MAX_EVENTS, sizeof event);
 
     if (host == NULL)
-        printf("Server listening on 127.0.0.1:%s\n", port);
-    else printf("Server listening on %s:%s\n", host, port);
+        LOG("Server listening on 127.0.0.1:%s\n", port);
+    else LOG("Server listening on %s:%s\n", host, port);
 
     handle->efd = efd;
     handle->sfd = sfd;

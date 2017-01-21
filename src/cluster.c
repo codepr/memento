@@ -72,61 +72,53 @@ void cluster_join(int distributed, map_t map, const char *hostname, const char *
     char *buf = (char *) malloc(CMD_BUFSIZE);
     bzero(buf, CMD_BUFSIZE);
     int done = 0;
-    int id, slave_number = 0;
 
     while(1) {
         while(read(sock_fd, buf, CMD_BUFSIZE) > 0) {
             struct message mm = deserialize(buf);
             char *m = mm.content;
-            if (m[0] == '#') {
-                // first connection, set number of slaves and number assigned
-                id = to_int(m + 1); // first position handle id
-                slave_number = to_int(m + 2); // second position handle slave number
-                LOG("Refreshed Node ID: %d and total slaves: %d\n", id, slave_number);
-            } else {
-                LOG("Request from master -> %s - %d\n", mm.content, mm.fd);
-                int proc = process_command(distributed, map, m, sock_fd, mm.fd);
-                struct message to_be_sent;
-                to_be_sent.fd = mm.fd;
-                size_t meta_len = sizeof(int) * 2;
-                size_t data_len = meta_len;
+            LOG("Request: %s", mm.content, mm.fd);
+            int proc = process_command(distributed, map, m, sock_fd, mm.fd);
+            struct message to_be_sent;
+            to_be_sent.fd = mm.fd;
+            size_t meta_len = sizeof(int) * 2;
+            size_t data_len = meta_len;
 
-                switch(proc) {
-                    case MAP_OK:
-                        to_be_sent.content = S_D_OK;
-                        data_len += sizeof(S_D_OK);
-                        break;
-                    case MAP_MISSING:
-                        to_be_sent.content = S_D_NIL;
-                        data_len += sizeof(S_D_NIL);
-                        break;
-                    case MAP_FULL:
-                    case MAP_OMEM:
-                        to_be_sent.content = S_D_OOM;
-                        data_len += sizeof(S_D_OOM);
-                        break;
-                    case COMMAND_NOT_FOUND:
-                        to_be_sent.content = S_D_UNK;
-                        data_len += sizeof(S_D_UNK);
-                        break;
-                    case END:
-                        done = 1;
-                        break;
-                    default:
-                        continue;
-                        break;
-                }
+            switch(proc) {
+                case MAP_OK:
+                    to_be_sent.content = S_D_OK;
+                    data_len += sizeof(S_D_OK);
+                    break;
+                case MAP_MISSING:
+                    to_be_sent.content = S_D_NIL;
+                    data_len += sizeof(S_D_NIL);
+                    break;
+                case MAP_FULL:
+                case MAP_OMEM:
+                    to_be_sent.content = S_D_OOM;
+                    data_len += sizeof(S_D_OOM);
+                    break;
+                case COMMAND_NOT_FOUND:
+                    to_be_sent.content = S_D_UNK;
+                    data_len += sizeof(S_D_UNK);
+                    break;
+                case END:
+                    done = 1;
+                    break;
+                default:
+                    continue;
+                    break;
+            }
 
-                // send out data
-                send(sock_fd, serialize(to_be_sent), data_len, 0);
+            // send out data
+            send(sock_fd, serialize(to_be_sent), data_len, 0);
 
-                bzero(buf, CMD_BUFSIZE);
-                if (done) {
-                    LOG("Closed connection on descriptor %d\n", sock_fd);
-                    /* Closing the descriptor will make epoll remove it from the
-                       set of descriptors which are monitored. */
-                    close(sock_fd);
-                }
+            bzero(buf, CMD_BUFSIZE);
+            if (done) {
+                LOG("Closed connection on descriptor %d\n", sock_fd);
+                /* Closing the descriptor will make epoll remove it from the
+                   set of descriptors which are monitored. */
+                close(sock_fd);
             }
         }
         free(buf);

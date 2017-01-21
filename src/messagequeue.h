@@ -36,13 +36,8 @@ struct consume_params {
     queue *q;
 };
 
-struct redirect_params {
-    int fd;
-    queue *q;
-};
 
-
-void mq_seed_gateway(queue *, int, map_t);
+void mq_seed_gateway(queue *);
 
 
 #endif
