@@ -20,12 +20,17 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
 #include "util.h"
 
+
+#define CHECK_PTR(ptr)                       \
+    if (!ptr) perror("No memory available"); \
+    return ptr;
 
 /* The implementation here was originally done by Gary S. Brown. Slighltly
  * modified by Pete Warden, without any imposition on the reuse of the code.
@@ -137,6 +142,16 @@ unsigned long crc32(const unsigned char *s, unsigned int len) {
     }
     return crc32val;
 }
+
+
+/*
+ * Safely memory allocation function
+ */
+void *shb_malloc(size_t size) {
+    void *ptr = malloc(size);
+    CHECK_PTR(ptr);
+}
+
 
 /*
  * Return the current timestamp in milliseconds

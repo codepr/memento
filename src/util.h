@@ -22,6 +22,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdio.h>
 #include <stdarg.h>
 
 #define GETINT(x) to_int(x)
@@ -31,6 +32,7 @@
 #define CRC32(c, x) crc32(c, x)
 #define RANDBETWEEN(A,B) A + rand()/(RAND_MAX/(B - A))
 
+void *shb_malloc(size_t);
 unsigned long crc32(const unsigned char *, unsigned int);
 long long current_timestamp(void);
 void trim(char *);
