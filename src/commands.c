@@ -21,9 +21,10 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include "commands.h"
-#include "cluster.h"
+/* #include "cluster.h" */
 #include "serializer.h"
 #include "util.h"
 
@@ -31,16 +32,15 @@
  * Array of commands that doesn't need a file descriptor, they exclusively
  * perform side-effects on the keyspace
  */
-const char *commands[]   = { "set", "del", "pub", "inc", "incf", "dec", "decf",
-    "append", "prepend", "expire" };
+const char *commands[]   = { "set", "del", "inc", "incf", "dec", "decf",
+    "append", "prepend" };
 /*
  * Array of query-commands, they do not perform side-effects directly on the
  * keyspace (except for sub/unsub, that add/remove file-descriptor as subscriber
  * to a 'topic' key), but they need a file-descriptor in order to respond to the
  * client requesting
  */
-const char *queries[]    = { "get", "getp", "sub", "unsub", "tail", "prefscan",
-    "fuzzyscan", "ttl" };
+const char *queries[]    = { "get", "getp", "ttl" };
 /*
  * Array of enumeration-commands, they perform action based on iteration through
  * the whole keyspace and respond with results directly to the client
@@ -110,13 +110,42 @@ int check_command(char *buffer) {
 }
 
 
+int command_handler(int fd, map *m) {
+    char buf[1024];
+    memset(buf, 0x00, 1024);
+
+    int ret = read(fd, buf, 1024);
+
+    if (ret == -1) return 1;
+    else {
+        int proc = process_command(0, m, buf, fd, fd);
+        switch(proc) {
+            case MAP_OK:
+                send(fd, S_OK, sizeof(S_OK), 0);
+                break;
+            case MAP_ERR:
+                send(fd, S_NIL, sizeof(S_NIL), 0);
+                break;
+            case COMMAND_NOT_FOUND:
+                send(fd, S_UNK, sizeof(S_UNK), 0);
+                break;
+            case END:
+                break;
+            default:
+                break;
+        }
+    }
+    return 0;
+}
+
+
 /*
  * process incoming request from the file descriptor socket represented by
  * sock_fd, map is an array of partition, every partition store an instance
  * of hashmap, keys are distributed through consistent hashing calculated with
  * crc32 % PARTITION_NUMBER
  */
-int process_command(int distributed, map_t map, char *buffer, int sock_fd, int resp_fd) {
+int process_command(int distributed, map *map, char *buffer, int sock_fd, int resp_fd) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
     // in case of empty command return nothing, next additions will be awaiting
@@ -158,37 +187,30 @@ int process_command(int distributed, map_t map, char *buffer, int sock_fd, int r
 /* Mapping tables to the commands handlers, maintaining the order defined by
  * arrays of commands
  */
-int (*cmds_func[]) (int, map_t, char *) = {
+int (*cmds_func[]) (int, map *, char *) = {
     &set_command,
     &del_command,
-    &pub_command,
     &inc_command,
     &incf_command,
     &dec_command,
     &decf_command,
     &append_command,
     &prepend_command,
-    &expire_command
 };
 
-int (*qrs_func[]) (int, map_t, char *, int, int) = {
+int (*qrs_func[]) (int, map *, char *, int, int) = {
     &get_command,
     &getp_command,
-    &sub_command,
-    &unsub_command,
-    &tail_command,
-    &prefscan_command,
-    &fuzzyscan_command,
     &ttl_command
 };
 
-int (*enum_func[]) (int, map_t, int, int) = {
+int (*enum_func[]) (int, map *, int, int) = {
     &count_command,
     &keys_command,
     &values_command
 };
 
-int (*srvs_func[]) (int, map_t) = {
+int (*srvs_func[]) (int, map *) = {
     &flush_command
 };
 
@@ -200,45 +222,16 @@ static char *append_string(const char *str, const char *token) {
     return strcat(strcat(ret, str), token);
 }
 
-/* callback function to find all keys with a given prefix */
-static int find_prefix(any_t t1, any_t t2) {
-    char *key = (char *) t1;
-    char *item_key = (char *) t2;
-
-    if (strncmp(key, item_key, strlen(key)) == 0) {
-        return MAP_OK;
-    }
-    return MAP_MISSING;
-}
 
 /* utility function, remove trailing newline */
 static void remove_newline(char *str) {
     str[strcspn(str, "\r\n")] = 0;
 }
 
-/* callback function to match a given pattern by fuzzy searching it */
-static int find_fuzzy_pattern(any_t t1, any_t t2) {
-    char *key = (char *) t1;
-    char *item_key = (char *) t2;
-    int i = 0;
-    int k = 0;
-    int key_size = strlen(key);
-    int item_size = strlen(item_key);
-
-    while (i < key_size) {
-        if(k < item_size && i < key_size) {
-            if (item_key[k] == key[i]) {
-                k++;
-                i++;
-            } else k++;
-        } else return MAP_MISSING;
-    }
-    return MAP_OK;
-}
 
 /* callback function to print all keys inside the hashmap */
-static int print_keys(any_t t1, any_t t2) {
-    kv_pair *kv = (kv_pair *) t2;
+static int print_keys(void * t1, void * t2) {
+    map_entry *kv = (map_entry *) t2;
     int *fd = (int *) t1;
     char *stringkey = (char *) malloc(strlen(kv->key) + 1);
     bzero(stringkey, strlen(stringkey));
@@ -249,10 +242,10 @@ static int print_keys(any_t t1, any_t t2) {
 }
 
 /* callback function to print all values inside the hashmap */
-static int print_values(any_t t1, any_t t2) {
-    kv_pair *kv = (kv_pair *) t2;
+static int print_values(void * t1, void * t2) {
+    map_entry *kv = (map_entry *) t2;
     int *fd = (int *) t1;
-    send(*fd, kv->data, strlen(kv->data), 0);
+    send(*fd, kv->val, strlen(kv->val), 0);
     return MAP_OK;
 }
 
@@ -264,19 +257,19 @@ static int print_values(any_t t1, any_t t2) {
  *
  *     SET <key> <value>
  */
-int set_command(int distributed, map_t map, char *command) {
+int set_command(int distributed, map * map, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1)
         arg_2 = arg_1 + strlen(arg_1) + 1;
     if (arg_2) {
-        char *arg_1_holder = malloc(strlen(arg_1));
-        char *arg_2_holder = malloc(strlen((char *) arg_2));
+        void *arg_1_holder = malloc(strlen(arg_1));
+        void *arg_2_holder = malloc(strlen((char *) arg_2));
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
-        ret = m_put(map, arg_1_holder, arg_2_holder);
+        ret = map_put(map, arg_1_holder, arg_2_holder);
     }
     return ret;
 }
@@ -290,15 +283,15 @@ int set_command(int distributed, map_t map, char *command) {
  *
  *     GET <key>
  */
-int get_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
+int get_command(int distributed, map * map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        int get = m_get(map, arg_1, &arg_2);
-        if (get == MAP_OK && arg_2) {
+        arg_2 = map_get(map, arg_1);
+        if (arg_2) {
             if (distributed == 1) {
                 struct message m;
                 char response[strlen((char *) arg_2) + 2];
@@ -310,8 +303,8 @@ int get_command(int distributed, map_t map, char *command, int sock_fd, int resp
             else
                 send(sock_fd, arg_2, strlen((char *) arg_2), 0);
             ret = 1;
-        } else ret = MAP_MISSING;
-    } else ret = MAP_MISSING;
+        } else ret = MAP_ERR;
+    } else ret = MAP_ERR;
     return ret;
 }
 
@@ -325,18 +318,17 @@ int get_command(int distributed, map_t map, char *command, int sock_fd, int resp
  *
  *     GETP <key>
  */
-int getp_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
+int getp_command(int distributed, map * map, char *command, int sock_fd, int resp_fd) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        kv_pair *kv = (kv_pair *) malloc(sizeof(kv_pair));
-        int get = m_get_kv_pair(map, arg_1, kv);
-        if (get == MAP_OK && kv) {
-            char *kvstring = (char *) malloc(strlen(kv->key) + strlen((char *) kv->data) + (sizeof(long) * 2) + 40);
+        map_entry *kv = map_get_entry(map, arg_1);
+        if (kv) {
+            char *kvstring = (char *) malloc(strlen(kv->key) + strlen((char *) kv->val) + (sizeof(long) * 2) + 40);
             sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %ld\n",
-                    kv->key, (char *) kv->data, kv->creation_time, kv->expire_time);
+                    (char *) kv->key, (char *) kv->val, kv->creation_time, kv->expire_time);
             if (distributed == 1) {
                 struct message m;
                 char response[strlen(kvstring) + 2];
@@ -348,8 +340,8 @@ int getp_command(int distributed, map_t map, char *command, int sock_fd, int res
                 send(sock_fd, kvstring, strlen(kvstring), 0);
             free(kvstring);
             ret = 1;
-        } else ret = MAP_MISSING;
-    } else ret = MAP_MISSING;
+        } else ret = MAP_ERR;
+    } else ret = MAP_ERR;
     return ret;
 }
 
@@ -362,83 +354,14 @@ int getp_command(int distributed, map_t map, char *command, int sock_fd, int res
  *
  *     DEL <key>
  */
-int del_command(int distributed, map_t map, char *command) {
+int del_command(int distributed, map * map, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     while (arg_1 != NULL) {
         trim(arg_1);
-        ret = m_remove(map, arg_1);
+        ret = map_del(map, arg_1);
         arg_1 = strtok(NULL, " ");
-    }
-    return ret;
-}
-
-/*
- * SUB command handler, calculate in which position of the array of the
- * partitions the key is stored using CRC32 and subscribe the file descriptor to
- * it if present, return MISSING reply code otherwise.
- *
- * Require at least one argument, but accept a list as well:
- *
- *     SUB <key1> <key2> .. <keyN>
- */
-int sub_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
-    int ret = 0;
-    char *arg_1 = NULL;
-    arg_1 = strtok(command, " ");
-    while (arg_1 != NULL) {
-        trim(arg_1);
-        ret = m_sub(map, arg_1, sock_fd);
-        arg_1 = strtok(NULL, " ");
-    }
-    return ret;
-}
-
-/*
- * UNSUB command handler, calculate in which position of the array of the
- * partitions the key is stored using CRC32 and unsubscribe the file descriptor
- * to it if present, return MISSING reply code otherwise.
- *
- * Require at least one argument, but accept a list as well:
- *
- *     UNSUB <key1> <key2> .. <keyN>
- */
-int unsub_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
-    int ret = 0;
-    char *arg_1 = NULL;
-    arg_1 = strtok(command, " ");
-    while (arg_1 != NULL) {
-        trim(arg_1);
-        ret = m_unsub(map, arg_1, sock_fd);
-        arg_1 = strtok(NULL, " ");
-    }
-    return ret;
-}
-
-/*
- * PUB command handler, calculate in which position of the array of the
- * partitions the key is stored using CRC32 and publish (e.g. SET) a new value
- * to it if present, return MISSING reply code otherwise.
- * All subscribed file descriptor will receive the value as a message
- * themselves.
- *
- * Require two arguments:
- *
- *     PUB <key> <value>
- */
-int pub_command(int distributed, map_t map, char *command) {
-    int ret = 0;
-    char *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    arg_2 = arg_1 + strlen(arg_1) + 1;
-    if (arg_1 && arg_2) {
-        char *arg_1_holder = malloc(strlen(arg_1));
-        char *arg_2_holder = malloc(strlen((char *) arg_2));
-        strcpy(arg_1_holder, arg_1);
-        strcpy(arg_2_holder, arg_2);
-        ret = m_pub(map, arg_1_holder, arg_2_holder);
     }
     return ret;
 }
@@ -454,15 +377,15 @@ int pub_command(int distributed, map_t map, char *command) {
  *     INC <key>   // +1 to <key>
  *     INC <key> 5 // +5 to <key>
  */
-int inc_command(int distributed, map_t map, char *command) {
+int inc_command(int distributed, map * map, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        ret = m_get(map, arg_1, &arg_2);
-        if (ret == MAP_OK && arg_2) {
+        arg_2 = map_get(map, arg_1);
+        if (arg_2) {
             char *s = (char *) arg_2;
             if (ISINT(s) == 1) {
                 int v = GETINT(s);
@@ -471,9 +394,9 @@ int inc_command(int distributed, map_t map, char *command) {
                     v += GETINT(by);
                 } else v++;
                 sprintf(arg_2, "%d\n", v);
-            } else ret = MAP_MISSING;
+            } else ret = MAP_ERR;
         }
-    } else ret = MAP_MISSING;
+    } else ret = MAP_ERR;
     return ret;
 }
 
@@ -488,15 +411,15 @@ int inc_command(int distributed, map_t map, char *command) {
  *     INCF <key>     // +1.0 to <key>
  *     INCF <key> 5.0 // +5.0 to <key>
  */
-int incf_command(int distributed, map_t map, char *command) {
+int incf_command(int distributed, map * map, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        ret = m_get(map, arg_1, &arg_2);
-        if (ret == MAP_OK && arg_2) {
+        arg_2 = map_get(map, arg_1);
+        if (arg_2) {
             char *s = (char *) arg_2;
             if (is_float(s) == 1) {
                 double v = GETDOUBLE(s);
@@ -505,9 +428,9 @@ int incf_command(int distributed, map_t map, char *command) {
                     v += GETDOUBLE(by);
                 } else v += 1.0;
                 sprintf(arg_2, "%lf\n", v);
-            } else ret = MAP_MISSING;
+            } else ret = MAP_ERR;
         }
-    } else ret = MAP_MISSING;
+    } else ret = MAP_ERR;
     return ret;
 }
 
@@ -522,15 +445,15 @@ int incf_command(int distributed, map_t map, char *command) {
  *     DEC <key>   // -1 to <key>
  *     DEC <key> 5 // -5 to <key>
  */
-int dec_command(int distributed, map_t map, char *command) {
+int dec_command(int distributed, map * map, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        ret = m_get(map, arg_1, &arg_2);
-        if (ret == MAP_OK && arg_2) {
+        arg_2 = map_get(map, arg_1);
+        if (arg_2) {
             char *s = (char *) arg_2;
             if(ISINT(s) == 1) {
                 int v = GETINT(s);
@@ -539,9 +462,9 @@ int dec_command(int distributed, map_t map, char *command) {
                     v -= GETINT(by);
                 } else v--;
                 sprintf(arg_2, "%d\n", v);
-            } else ret = MAP_MISSING;
+            } else ret = MAP_ERR;
         }
-    } else ret = MAP_MISSING;
+    } else ret = MAP_ERR;
     return ret;
 }
 
@@ -556,15 +479,15 @@ int dec_command(int distributed, map_t map, char *command) {
  *     DECF <key>     // -1.0 to <key>
  *     DECF <key> 5.0 // -5.0 to <key>
  */
-int decf_command(int distributed, map_t map, char *command) {
+int decf_command(int distributed, map * map, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        ret = m_get(map, arg_1, &arg_2);
-        if (ret == MAP_OK && arg_2) {
+        arg_2 = map_get(map, arg_1);
+        if (arg_2) {
             char *s = (char *) arg_2;
             if(is_float(s) == 1) {
                 double v = GETDOUBLE(s);
@@ -573,9 +496,9 @@ int decf_command(int distributed, map_t map, char *command) {
                     v -= GETDOUBLE(by);
                 } else v -= 1.0;
                 sprintf(arg_2, "%lf\n", v);
-            } else ret = MAP_MISSING;
+            } else ret = MAP_ERR;
         }
-    } else ret = MAP_MISSING;
+    } else ret = MAP_ERR;
     return ret;
 }
 
@@ -585,9 +508,9 @@ int decf_command(int distributed, map_t map, char *command) {
  *
  * Doesn't require any argument.
  */
-int count_command(int distributed, map_t map, int sock_fd, int resp_fd) {
+int count_command(int distributed, map *map, int sock_fd, int resp_fd) {
     int len = 0;
-    len += m_length(map);
+    len += map->size;
     char c_len[24];
     sprintf(c_len, "%d\n", len);
     send(sock_fd, c_len, 24, 0);
@@ -600,10 +523,9 @@ int count_command(int distributed, map_t map, int sock_fd, int resp_fd) {
  *
  * Doesn't require any argument.
  */
-int keys_command(int distributed, map_t map, int sock_fd, int resp_fd) {
-    h_map *m = (h_map *) map;
+int keys_command(int distributed, map *m, int sock_fd, int resp_fd) {
     if (m->size > 0)
-        m_iterate(map, print_keys, &sock_fd);
+        map_iterate(m, print_keys, &sock_fd);
     return 1;
 }
 
@@ -613,99 +535,15 @@ int keys_command(int distributed, map_t map, int sock_fd, int resp_fd) {
  *
  * Doesn't require any argument.
  */
-int values_command(int distributed, map_t map, int sock_fd, int resp_fd) {
-    h_map *m = (h_map *) map;
+int values_command(int distributed, map *m, int sock_fd, int resp_fd) {
     if (m->size > 0)
-        m_iterate(map, print_values, &sock_fd);
+        map_iterate(m, print_values, &sock_fd);
     return 1;
 }
 
-/*
- * TAIL command handler, works like SUB but using an index as a cursor on the
- * queue of the previous published values associated to a key, it allow to
- * iterate through the full history of the pubblications at will.
- *
- * Require at least one argument, but accept also an optional cursor that define
- * from where to start in the queue of messages associated to the 'topic' key:
- *
- *     TAIL <key>
- *     TAIL <key> 5 // leap through the first 5 messages
- */
-int tail_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
-    int ret = 0;
-    char *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    arg_2 = arg_1 + strlen(arg_1) + 1;
-    if (arg_1 && arg_2) {
-        char *arg_1_holder = malloc(strlen(arg_1));
-        char *arg_2_holder = malloc(strlen((char *) arg_2));
-        strcpy(arg_1_holder, arg_1);
-        strcpy(arg_2_holder, arg_2);
-        if (ISINT(arg_2_holder)) {
-            int i = GETINT(arg_2_holder);
-            m_sub_from(map, arg_1, sock_fd, i);
-            ret = 1;
-        } else ret = -1;
-    } else ret = MAP_MISSING;
-    return ret;
-}
 
 /*
- * PREFSCAN command handler, scans the entire keyspace and build a list with all
- * the keys that match the prefix passed directly writing it back to the
- * file-descriptor.
- *
- * Require one argument:
- *
- *     PREFSCAN <keyprefix>
- */
-int prefscan_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
-    int ret = 0;
-    char *arg_1 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        int flag = 0;
-        h_map *m = (h_map *) map;
-        if (m->size > 0) {
-            ret = m_prefscan(map, find_prefix, arg_1, sock_fd);
-            if (ret == MAP_OK) flag = 1;
-        }
-        if (flag == 1) ret = 1;
-    } else ret = MAP_MISSING;
-    return ret;
-}
-
-/*
- * FUZZYSCAN command handler, scans the entire keyspace and build a list with
- * all the keys that match the prefix according to a basic fuzzy-search
- * algorithm passed directly writing it back to the file-descriptor.
- *
- * Require one argument:
- *
- *     FUZZYSCAN <keyprefix>
- */
-int fuzzyscan_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
-    int ret = 0;
-    char *arg_1 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        int flag = 0;
-        h_map *m = (h_map *) map;
-        if (m->size > 0) {
-            ret = m_fuzzyscan(map, find_fuzzy_pattern, arg_1, sock_fd);
-            if (ret == MAP_OK) flag = 1;
-        }
-        /* } */
-        if (flag == 1) ret = 1;
-}
-return ret;
-}
-
-/*
- * APPEND command handler, finds the map_tinside the partitions array using
+ * APPEND command handler, finds the map *inside the partitions array using
  * CRC32 and append a suffix to the value associated to the found key, returning
  * MISSING reply code if no key were found.
  *
@@ -713,9 +551,9 @@ return ret;
  *
  *     APPEND <key> <value>
  */
-int append_command(int distributed, map_t map, char *command) {
+int append_command(int distributed, map *m, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     arg_2 = arg_1 + strlen(arg_1) + 1;
@@ -725,18 +563,18 @@ int append_command(int distributed, map_t map, char *command) {
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
         void *val = NULL;
-        ret = m_get(map, arg_1_holder, &val);
-        if (ret == MAP_OK) {
+        val = map_get(m, arg_1_holder);
+        if (val) {
             remove_newline(val);
             char *append = append_string(val, arg_2_holder);
-            ret = m_put(map, arg_1_holder, append);
+            ret = map_put(m, arg_1_holder, append);
         }
-    } else ret = MAP_MISSING;
+    } else ret = MAP_ERR;
     return ret;
 }
 
 /*
- * PREPEND command handler, finds the map_tinside the partitions array using
+ * PREPEND command handler, finds the map *inside the partitions array using
  * CRC32 and prepend a prefix to the value associated to the found key, returning
  * MISSING reply code if no key were found.
  *
@@ -744,9 +582,9 @@ int append_command(int distributed, map_t map, char *command) {
  *
  *     PREPEND <key> <value>
  */
-int prepend_command(int distributed, map_t map, char *command) {
+int prepend_command(int distributed, map *m, char *command) {
     int ret = 0;
-    char *arg_1 = NULL;
+    void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     arg_2 = arg_1 + strlen(arg_1) + 1;
@@ -756,39 +594,16 @@ int prepend_command(int distributed, map_t map, char *command) {
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
         void *val = NULL;
-        ret = m_get(map, arg_1_holder, &val);
-        if (ret == MAP_OK) {
+        val = map_get(m, arg_1_holder);
+        if (val) {
             remove_newline(arg_2_holder);
             char *append = append_string(arg_2_holder, val);
-            ret = m_put(map, arg_1_holder, append);
+            ret = map_put(m, arg_1_holder, append);
         }
-    } else ret = MAP_MISSING;
+    } else ret = MAP_ERR;
     return ret;
 }
 
-/*
- * EXPIRE command handler, finds the partitions containing the keys using CRC32
- * and set the expire time specified to that key, after which it will be deleted.
- *
- * Require two arguments:
- *
- *     EXPIRE <key> <ms>
- */
-int expire_command(int distributed, map_t map, char *command) {
-    int ret = 0;
-    char *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    arg_2 = arg_1 + strlen(arg_1) + 1;
-    if (arg_1 && arg_2) {
-        char *arg_1_holder = malloc(strlen(arg_1));
-        char *arg_2_holder = malloc(strlen((char *) arg_2));
-        strcpy(arg_1_holder, arg_1);
-        strcpy(arg_2_holder, arg_2);
-        ret = m_set_expire_time(map, arg_1_holder, (long) GETINT(arg_2_holder));
-    } else ret = MAP_MISSING;
-    return ret;
-}
 
 /*
  * TTL command handler, finds the partitions containing the keys using CRC32 and
@@ -798,14 +613,14 @@ int expire_command(int distributed, map_t map, char *command) {
  *
  *     TTL <key>
  */
-int ttl_command(int distributed, map_t map, char *command, int sock_fd, int resp_fd) {
-    char *arg_1 = NULL;
+int ttl_command(int distributed, map *m, char *command, int sock_fd, int resp_fd) {
+    void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        kv_pair *kv = (kv_pair *) malloc(sizeof(kv_pair));
-        int get = m_get_kv_pair(map, arg_1, kv);
-        if (get == MAP_OK && kv) {
+        map_entry *kv = (map_entry *) malloc(sizeof(map_entry));
+        kv = map_get_entry(m, arg_1);
+        if (kv) {
             char ttl[7];
             if (kv->has_expire_time)
                 sprintf(ttl, "%ld\n", kv->expire_time / 1000);
@@ -813,7 +628,7 @@ int ttl_command(int distributed, map_t map, char *command, int sock_fd, int resp
                 sprintf(ttl, "%d\n", -1);
             send(sock_fd, ttl, 7, 0);
         }
-    } else return MAP_MISSING;
+    } else return MAP_ERR;
     return 0;
 }
 
@@ -822,9 +637,9 @@ int ttl_command(int distributed, map_t map, char *command, int sock_fd, int resp
  *
  * Doesn't require any argument.
  */
-int flush_command(int distributed, map_t map) {
+int flush_command(int distributed, map *map) {
     if (map != NULL)
-        m_release(map);
+        map_release(map);
     return OK;
 }
 

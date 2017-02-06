@@ -22,21 +22,21 @@
 #ifndef NETWORKING_H
 #define NETWORKING_H
 
-#include <sys/epoll.h>
+#include "map.h"
 
-#define MAX_EVENTS (1024)
+#define MAX_EVENTS (2048)
 #define MAX_DATA_SIZE (10485760)
 
-struct s_handle {
-    int efd;
-    int sfd;
-    int s;
-    struct epoll_event event;
-    struct epoll_event *events;
-};
+
+/*
+ * File descriptor handler, a functor used when incoming data from clients must
+ * be handled
+ */
+typedef int (*fd_handler)(int, map *);
 
 
-int set_socket_non_blocking(int);
-struct s_handle *create_async_server(const char *, const char *);
+int set_nonblocking(int);
+int listento(const char *, const char *);
+int event_loop(int *, size_t, map *, fd_handler);
 
 #endif

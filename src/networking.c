@@ -33,11 +33,12 @@
 #include <sys/epoll.h>
 #include <arpa/inet.h>
 #include "networking.h"
+#include "commands.h"
 #include "util.h"
 
 
-// set non-blocking socket
-int set_socket_non_blocking(int fd) {
+/* set non-blocking socket */
+int set_nonblocking(int fd) {
     int flags, result;
     flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
@@ -57,29 +58,26 @@ int set_socket_non_blocking(int fd) {
 static int create_and_bind(const char *host, const char *port) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
-    int s, sfd;
+    int sfd;
 
-    memset (&hints, 0, sizeof (struct addrinfo));
+    memset(&hints, 0, sizeof (struct addrinfo));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;     /* 0.0.0.0 all interfaces */
 
-    s = getaddrinfo(host, port, &hints, &result);
-    if (s != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
+    if (getaddrinfo(host, port, &hints, &result) != 0) {
+        perror("getaddrinfo error");
         return -1;
     }
 
     for (rp = result; rp != NULL; rp = rp->ai_next) {
         sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sfd == -1)
-            continue;
 
-        s = bind(sfd, rp->ai_addr, rp->ai_addrlen);
-        if (s == 0) {
+        if (sfd == -1) continue;
+
+        if ((bind(sfd, rp->ai_addr, rp->ai_addrlen)) == 0)
             /* We managed to bind successfully! */
             break;
-        }
 
         close(sfd);
     }
@@ -94,50 +92,90 @@ static int create_and_bind(const char *host, const char *port) {
     return sfd;
 }
 
-struct s_handle *create_async_server(const char *host, const char *port) {
-    int efd, sfd, s;
-    struct epoll_event event, *events;
-    struct s_handle *handle = (struct s_handle *) malloc(sizeof(struct s_handle));
 
-    sfd = create_and_bind(host, port);
-    if (sfd == -1)
+/*
+ * Start listening on the specfied address and port
+ */
+int listento(const char *host, const char *port) {
+    int sfd;
+
+    if ((sfd = create_and_bind(host, port)) == -1)
         abort();
 
-    s = set_socket_non_blocking(sfd);
-    if (s == -1)
+    if ((set_nonblocking(sfd)) == -1)
         abort();
 
-    s = listen(sfd, SOMAXCONN);
-    if (s == -1) {
+    if ((listen(sfd, SOMAXCONN)) == -1) {
         perror("listen");
         abort();
     }
 
-    efd = epoll_create1(0);
-    if (efd == -1) {
-        perror("epoll_create");
-        abort();
-    }
-
-    event.data.fd = sfd;
-    event.events = EPOLLIN | EPOLLET;
-    s = epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event);
-    if (s == -1) {
-        perror("epoll_ctl");
-        abort();
-    }
-
-    /* Buffer where events are returned */
-    events = calloc(MAX_EVENTS, sizeof event);
-
     if (host == NULL)
-        LOG("Server listening on 127.0.0.1:%s\n", port);
-    else LOG("Server listening on %s:%s\n", host, port);
+        LOG("Instance listening on 127.0.0.1:%s\n", port);
+    else LOG("Instance listening on %s:%s\n", host, port);
 
-    handle->efd = efd;
-    handle->sfd = sfd;
-    handle->s = s;
-    handle->event = event;
-    handle->events = events;
-    return handle;
+    return sfd;
 }
+
+
+/*
+ * Start an event loop waiting for incoming events on fd
+ */
+int event_loop(int *fds, size_t len, map *m, fd_handler handler_ptr) {
+
+    /* Check the number of descriptor */
+    if (len < 2) {
+        fprintf(stderr, "Descriptor number must be at least 2\n");
+        exit(EXIT_FAILURE);
+    }
+
+    struct epoll_event ev, evs[MAX_EVENTS];
+    struct sockaddr addr;
+    socklen_t addrlen = sizeof addr;
+    int epollfd, nfds, client, done = 0;
+
+    if ((epollfd = epoll_create1(0)) == -1) {
+        perror("epoll_create1");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int n = 0; n < len; ++n) {
+        ev.events = EPOLLIN | EPOLLET;
+        ev.data.fd = fds[n];
+        if(epoll_ctl(epollfd, EPOLL_CTL_ADD, fds[n], &ev) == -1) {
+            perror("epoll_ctl");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    while(1) {
+        if ((nfds = epoll_wait(epollfd, evs, MAX_EVENTS, -1)) == -1) {
+            perror("epoll_wait");
+            exit(EXIT_FAILURE);
+        }
+
+        for (int i = 0; i < nfds; ++i) {
+            /* If fdescriptor is main server or bus server*/
+            if (evs[i].data.fd == fds[0] || evs[i].data.fd == fds[1]) {
+                if ((client = accept(evs[i].data.fd,
+                                (struct sockaddr *) &addr, &addrlen)) == -1) {
+                    perror("accept");
+                    exit(EXIT_FAILURE);
+                }
+                set_nonblocking(client);
+                ev.events = EPOLLIN | EPOLLET;
+                ev.data.fd = client;
+                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, client, &ev) == -1) {
+                    perror("epoll_ctl: client connection");
+                    exit(EXIT_FAILURE);
+                }
+            } else {
+                done = (*handler_ptr)(evs[i].data.fd, m);
+                if (done) break;
+            }
+        }
+        if (done) break;
+    }
+    return 0;
+}
+

@@ -21,62 +21,22 @@
 
 #include <stdio.h>
 #include <getopt.h>
-#include <pthread.h>
-#include <signal.h>
 #include <unistd.h>
-#include "server.h"
-#include "cluster.h"
-#include "queue.h"
-#include "messagequeue.h"
-
-volatile sig_atomic_t running = 1;
-
-struct connection {
-    const char *address;
-    const char *port;
-    int distributed;
-    queue *mqueue;
-    map_t map;
-};
-
-
-void stop(int signum) {
-    running = 0;
-    exit(0);
-}
-
-
-static void *cluster_pthread(void *param) {
-    struct connection *conn = (struct connection *) param;
-    queue *mqueue = conn->mqueue;
-    mq_seed_gateway(mqueue);
-    return NULL;
-}
-
-static void *cluster_join_pthread(void *param) {
-    struct connection *conn = (struct connection *) param;
-    const char *address = conn->address;
-    const char *port = conn->port;
-    map_t map = conn->map;
-    int distributed = conn->distributed;
-    cluster_join(distributed, map, address, port);
-    return NULL;
-}
+#include <time.h>
+#include "commands.h"
+#include "networking.h"
 
 
 int main(int argc, char **argv) {
+    /* Initialize random seed */
     srand((unsigned int) time(NULL));
-    signal(SIGINT, stop);
     char *address = "127.0.0.1";
-    char *port = PORT;
-    static pthread_t t;
-    int opt;
-    int master = 0;
-    int distributed = 0;
-    queue *mqueue = create_queue();
-    map_t map = m_create();
+    char *port = "6373";
+    char *seed_addr = NULL;
+    char *seed_port = NULL;
+    int opt, seed = 0, cluster_mode = 0;
 
-    while((opt = getopt(argc, argv, "a:p:ms")) != -1) {
+    while((opt = getopt(argc, argv, "a:p:cSA:P:")) != -1) {
         switch(opt) {
             case 'a':
                 address = optarg;
@@ -84,39 +44,76 @@ int main(int argc, char **argv) {
             case 'p':
                 port = optarg;
                 break;
-            case 'm':
-                master = 1;
-                distributed = 1;
+            case 'c':
+                cluster_mode = 1;
+            case 'S':
+                seed = 1;
                 break;
-            case 's':
-                master = 0;
-                distributed = 1;
-                break;
+            case 'A':
+                cluster_mode = 1;
+                seed = 0;
+                seed_addr = optarg;
+            case 'P':
+                cluster_mode = 1;
+                seed = 0;
+                seed_port = optarg;
             default:
-                distributed = 0;
-                master = 0;
+                seed = 0;
+                cluster_mode = 0;
                 break;
         }
     }
 
-    struct connection *conn = (struct connection *) malloc(sizeof(struct connection));
-    conn->address = address;
-    conn->port = MQ_PORT;
-    conn->mqueue = mqueue;
-    conn->map = map;
-    conn->distributed = distributed;
+    /* If cluster mode is enabled Initialize cluster map */
+    if (cluster_mode == 1) {
+        if (seed == 1) {
+            map *cluster = map_create();
+            char *self = NULL;
+            sprintf(self, "%s:%s", address, port);
+            int self_fd = -1;
+            map_put(cluster, self, &self_fd);
 
-    if (distributed == 1) {
-        if (master == 1) {
-            if (pthread_create(&t, NULL, &cluster_pthread, conn) != 0)
-                perror("ERROR pthread");
-            start_server(mqueue, 1, distributed, map, address, port);
+            /* initialize two sockets:
+             * - one for incoming client connections
+             * - a second for intercommunication between nodes
+             */
+            int sockets[2] = {
+                listento(address, "9999"),
+                listento(address, "19999")
+            };
+
+            map *m = map_create();
+
+            /* MUST HANDLE CLUSTER WIDE */
+
+            /* #<{(| handler function for incoming data |)}># */
+            /* fd_handler handler_ptr = &command_handler; */
+            /*  */
+            /* event_loop(sockets, 2, m, handler_ptr); */
+
         } else {
-            if (pthread_create(&t, NULL, &cluster_join_pthread, conn) != 0)
-                perror("ERROR pthread");
-            while(1) {}
+
+            /* MUST CONNECT TO A SEED, CLUSTER WIDE */
+
         }
-    } else start_server(mqueue, 0, 0, map, address, port);
+    } else {
+
+        /* initialize two sockets:
+         * - one for incoming client connections
+         * - a second for intercommunication between nodes
+         */
+        int sockets[2] = {
+            listento(address, "9999"),
+            listento(address, "19999")
+        };
+
+        map *m = map_create();
+        /* handler function for incoming data */
+        fd_handler handler_ptr = &command_handler;
+
+        event_loop(sockets, 2, m, handler_ptr);
+
+    }
 
     return 0;
 }

@@ -40,6 +40,7 @@ int is_integer(const char *);
 int is_float(const char *);
 int to_int(const char *);
 double to_double(const char *);
+const char *random_string(unsigned int);
 
 void s_log(const char *, ...);
 

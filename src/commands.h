@@ -37,12 +37,13 @@
 #define S_D_UNK "* (Unknown command)\r\n"
 
 
-typedef enum {OK, PAYLOAD_OK, ITERATE_OK, MISSING, FULL, OOM, COMMAND_NOT_FOUND, END} reply_code;
+typedef enum { OK, PAYLOAD_OK, ITERATE_OK,
+    MISSING, FULL, OOM, COMMAND_NOT_FOUND, END} reply_code;
 
 
 int check_command(char *);
-
-int process_command(int, map_t, char *, int, int);
+int command_handler(int, map *);
+int process_command(int, map *, char *, int, int);
 
 extern const char *commands[];
 extern const char *queries[];
@@ -55,35 +56,28 @@ int enumerates_array_len(void);
 int services_array_len(void);
 
 // Commands
-int set_command(int, map_t, char *);
-int del_command(int, map_t, char *);
-int pub_command(int, map_t, char *);
-int inc_command(int, map_t, char *);
-int incf_command(int, map_t, char *);
-int dec_command(int, map_t, char *);
-int decf_command(int, map_t, char *);
-int append_command(int, map_t, char *);
-int prepend_command(int, map_t, char *);
-int expire_command(int, map_t, char *);
+int set_command(int, map *, char *);
+int del_command(int, map *, char *);
+int inc_command(int, map *, char *);
+int incf_command(int, map *, char *);
+int dec_command(int, map *, char *);
+int decf_command(int, map *, char *);
+int append_command(int, map *, char *);
+int prepend_command(int, map *, char *);
 // Queries
-int get_command(int, map_t, char *, int, int);
-int getp_command(int, map_t, char *, int, int);
-int sub_command(int, map_t, char *, int, int);
-int unsub_command(int, map_t, char *, int, int);
-int tail_command(int, map_t, char *, int, int);
-int prefscan_command(int, map_t, char *, int, int);
-int fuzzyscan_command(int, map_t, char *, int, int);
-int ttl_command(int, map_t, char *, int, int);
+int get_command(int, map *, char *, int, int);
+int getp_command(int, map *, char *, int, int);
+int ttl_command(int, map *, char *, int, int);
 // enumerates
-int count_command(int, map_t, int, int);
-int keys_command(int, map_t, int, int);
-int values_command(int, map_t, int, int);
+int count_command(int, map *, int, int);
+int keys_command(int, map *, int, int);
+int values_command(int, map *, int, int);
 // services
-int flush_command(int, map_t);
+int flush_command(int, map *);
 
-extern int (*cmds_func[]) (int, map_t, char *);
-extern int (*qrs_func[]) (int, map_t, char *, int, int);
-extern int (*enum_func[]) (int, map_t, int, int);
-extern int (*srvs_func[]) (int, map_t);
+extern int (*cmds_func[]) (int, map *, char *);
+extern int (*qrs_func[]) (int, map *, char *, int, int);
+extern int (*enum_func[]) (int, map *, int, int);
+extern int (*srvs_func[]) (int, map *);
 
 #endif

@@ -28,8 +28,11 @@
 #include "util.h"
 
 
-#define CHECK_PTR(ptr)                       \
-    if (!ptr) perror("No memory available"); \
+#define CHECK_PTR(ptr)                  \
+    if (!ptr) {                         \
+        perror("No memory available");  \
+        return NULL;                    \
+    }                                   \
     return ptr;
 
 /* The implementation here was originally done by Gary S. Brown. Slighltly
@@ -214,6 +217,27 @@ double to_double(const char *s) {
     double dnum;
     if (sscanf(s, "%lf", &dnum) == 1) return dnum;
     return 0.0;
+}
+
+
+/*
+ * Define the current node name inside the cluster
+ */
+const char *node_name(unsigned int len) {
+
+    char *pool = "abcdefghijklmnopqrstwxyz0123456789";
+    /* Length of the string */
+    int i = 0;
+
+    char *node_name = malloc(len);
+
+    /* build name using random positions in the poll */
+    while(len--) {
+        node_name[i++] = pool[(rand() % strlen(pool))];
+    }
+
+    return node_name;
+
 }
 
 

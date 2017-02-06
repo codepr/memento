@@ -26,6 +26,9 @@
 
 #define CMD_BUFSIZE 1024
 
+struct cluster_member;
+typedef struct cluster_member member;
+
 void cluster_join(int, map_t, const char *, const char *);
 
 #endif
