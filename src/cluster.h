@@ -24,6 +24,8 @@
 
 #include "map.h"
 #include "list.h"
+#include "networking.h"
+#include <sys/epoll.h>
 
 #define CMD_BUFSIZE (1024)
 
@@ -32,7 +34,7 @@ typedef enum { REACHABLE, UNREACHABLE } state;
 
 typedef struct {
     const char *name;   // node name, a 64 byte len string
-    char *addr;         // node ip address
+    const char *addr;   // node ip address
     int port;           // node port
     int fd;             // node file descriptor
     state state;        // current node state in the cluster
@@ -40,9 +42,12 @@ typedef struct {
 } cluster_node;
 
 typedef struct {
-    int cluster_mode : 1;   // distributed flag
-    map *store;             // items of the DB
-    list *cluster;          // map of cluster nodes
+    int lock : 1;                       // global lock, used in a cluster context
+    int cluster_mode : 1;               // distributed flag
+    struct epoll_event ev;              // global epoll
+    struct epoll_event evs[MAX_EVENTS]; // global event loop
+    map *store;                         // items of the DB
+    list *cluster;                      // map of cluster nodes
 } shibui;
 
 
@@ -53,8 +58,10 @@ extern shibui instance;
 void cluster_start(int, int *, size_t, map *, map *);
 int cluster_init(int);
 void cluster_add_node(cluster_node *);
+cluster_node *cluster_get_node(const char *, const char *);
 int cluster_contained(cluster_node *);
 int cluster_reachable(cluster_node *);
 int cluster_set_state(cluster_node *, state);
+int cluster_join(const char *, const char *);
 
 #endif

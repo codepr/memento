@@ -161,13 +161,16 @@ int connectto(const char *host, const char *port) {
  */
 int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
+    /* wait unitil lock is released */
+    while (instance.lock == 1) {}
+
     /* Check the number of descriptor */
     if (len < 2) {
         fprintf(stderr, "Descriptor number must be at least 2\n");
         exit(EXIT_FAILURE);
     }
 
-    struct epoll_event ev, evs[MAX_EVENTS];
+    /* struct epoll_event ev, evs[MAX_EVENTS]; */
     struct sockaddr addr;
     socklen_t addrlen = sizeof addr;
     int epollfd, nfds, client, done = 0;
@@ -178,9 +181,9 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
     }
 
     for (int n = 0; n < len; ++n) {
-        ev.events = EPOLLIN | EPOLLET;
-        ev.data.fd = fds[n];
-        if(epoll_ctl(epollfd, EPOLL_CTL_ADD, fds[n], &ev) == -1) {
+        instance.ev.events = EPOLLIN | EPOLLET;
+        instance.ev.data.fd = fds[n];
+        if(epoll_ctl(epollfd, EPOLL_CTL_ADD, fds[n], &instance.ev) == -1) {
             perror("epoll_ctl");
             exit(EXIT_FAILURE);
         }
@@ -188,29 +191,29 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
     while(1) {
 
-        if ((nfds = epoll_wait(epollfd, evs, MAX_EVENTS, -1)) == -1) {
+        if ((nfds = epoll_wait(epollfd, instance.evs, MAX_EVENTS, -1)) == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
         }
 
         for (int i = 0; i < nfds; ++i) {
             /* If fdescriptor is main server or bus server*/
-            if (evs[i].data.fd == fds[0] || evs[i].data.fd == fds[1]) {
-                if ((client = accept(evs[i].data.fd,
+            if (instance.evs[i].data.fd == fds[0] || instance.evs[i].data.fd == fds[1]) {
+                if ((client = accept(instance.evs[i].data.fd,
                                 (struct sockaddr *) &addr, &addrlen)) == -1) {
                     perror("accept");
                     exit(EXIT_FAILURE);
                 }
                 LOG("Connection received");
                 set_nonblocking(client);
-                ev.events = EPOLLIN | EPOLLET;
-                ev.data.fd = client;
-                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, client, &ev) == -1) {
+                instance.ev.events = EPOLLIN | EPOLLET;
+                instance.ev.data.fd = client;
+                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, client, &instance.ev) == -1) {
                     perror("epoll_ctl: client connection");
                     exit(EXIT_FAILURE);
                 }
 
-                if (evs[i].data.fd == fds[1]) {
+                if (instance.evs[i].data.fd == fds[1]) {
                     char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
                     // add to members
                     if((getnameinfo(&addr, addrlen,
@@ -223,7 +226,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                         (cluster_node *) shb_malloc(sizeof(cluster_node));
                     new_node->addr = hbuf;
                     new_node->port = GETINT(sbuf);
-                    new_node->name = random_string(64);
+                    /* new_node->name = random_string(64); */
 
                     if (cluster_contained(new_node) == 0) {
                         new_node->fd = client;
@@ -242,7 +245,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 }
             } else {
                 /* there's some data to be processed in the descriptor */
-                done = (*handler_ptr)(evs[i].data.fd);
+                done = (*handler_ptr)(instance.evs[i].data.fd);
             }
             /* if (done) break; */
         }

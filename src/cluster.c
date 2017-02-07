@@ -28,9 +28,10 @@
 /* #include <fcntl.h> */
 /* #include <time.h> */
 #include <string.h>
+#include "util.h"
 #include "list.h"
 #include "cluster.h"
-#include "commands.h"
+/* #include "commands.h" */
 
 
 shibui instance;
@@ -44,6 +45,9 @@ int cluster_init(int distributed) {
     instance.cluster_mode = distributed;
     instance.store = map_create();
     instance.cluster = list_create();
+    if (distributed == 1)
+        instance.lock = 1;
+    else instance.lock = 0;
     if (instance.store != NULL)
         return 0;
     else return -1;
@@ -91,7 +95,7 @@ int cluster_reachable(cluster_node *node) {
 /*
  * Sets the cluster node contained in the cluster list to state st
  */
-int cluster_set_reachable(cluster_node *node, state st) {
+int cluster_set_state(cluster_node *node, state st) {
     /* Start from head node */
     list_node *cursor = instance.cluster->head;
     /* cycle till cursor != NULL */
@@ -108,6 +112,58 @@ int cluster_set_reachable(cluster_node *node, state st) {
     /* node is not present */
     return 0;
 }
+
+
+/*
+ * Return the associated cluster node to the host and port specified
+ * FIXME: repeated code
+ */
+cluster_node *cluster_get_node(const char *host, const char *port) {
+    /* Start from head node */
+    list_node *cursor = instance.cluster->head;
+    /* cycle till cursor != NULL */
+    while (cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        if ((strncmp(n->addr, host, strlen(host))) == 0
+                && n->port == GETINT(port)) {
+            /* found a match */
+            return n;
+        }
+        cursor = cursor->next; // move the pointer forward
+    }
+    /* node is not present */
+    return NULL;
+
+}
+
+/*
+ * Add a node to the cluster by joining
+ */
+int cluster_join(const char *host, const char *port) {
+    int fd;
+    if ((fd = connectto(host, port)) == -1) {
+        fprintf(stderr, "[!] Impossible connection to %s:%s\n", host, port);
+        return -1;
+    }
+    /* If cluster node is present set the file descriptor */
+    cluster_node *n = cluster_get_node(host, port);
+    if (n) {
+        n->fd = fd;
+        if (cluster_reachable(n) == 0) cluster_set_state(n, REACHABLE);
+    } else {
+        /* create a new node and add it to the list */
+        cluster_node *new_node =
+            (cluster_node *) shb_malloc(sizeof(cluster_node));
+        new_node->addr = host;
+        new_node->port = GETINT(port);
+        new_node->fd = fd;
+        new_node->state = REACHABLE;
+        new_node->seed = 0;
+    }
+    return 1;
+}
+
+
 
 
 /* void cluster_start(int cluster_mode, int *fds, */

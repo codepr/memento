@@ -135,6 +135,7 @@ static int hashmap_rehash(map *m) {
     return MAP_OK;
 }
 
+
 /*
  * Return an empty hashmap, or NULL on failure. The newly create hashmap is
  * dynamically allocated on the heap memory, so it must be released manually.
