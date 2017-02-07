@@ -32,7 +32,7 @@
  * File descriptor handler, a functor used when incoming data from clients must
  * be handled
  */
-typedef int (*fd_handler)(int, int, map *);
+typedef int (*fd_handler)(int);
 
 
 int set_nonblocking(int);

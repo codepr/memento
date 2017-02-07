@@ -100,6 +100,7 @@ int main(int argc, char **argv) {
         }
     } else {
 
+        cluster_init(0);
         /* initialize two sockets:
          * - one for incoming client connections
          * - a second for intercommunication between nodes
@@ -109,7 +110,6 @@ int main(int argc, char **argv) {
             listento(address, "19999")
         };
 
-        map *m = map_create();
         /* handler function for incoming data */
         fd_handler handler_ptr = &command_handler;
 

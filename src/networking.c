@@ -218,14 +218,14 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                             sbuf, sizeof sbuf,
                             NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
                         LOG("New connection from %s:%s\r\n", hbuf, sbuf);
-                    char *peer = NULL;
-                    sprintf(peer, "%s:%s", hbuf, sbuf);
-                    // FIXME:must build node struct
-                    list_head_insert(instance.cluster, peer);
+                    /* char *peer = NULL; */
+                    /* sprintf(peer, "%s:%s", hbuf, sbuf); */
+                    /* // FIXME:must build node struct */
+                    /* list_head_insert(instance.cluster, peer); */
                 }
             } else {
                 /* there's some data to be processed in the descriptor */
-                done = (*handler_ptr)(instance.cluster_mode, evs[i].data.fd, instance.store);
+                done = (*handler_ptr)(evs[i].data.fd);
                 if (instance.cluster_mode) {
                     if (done != 0) {
                         // must add sfd to the event loop
