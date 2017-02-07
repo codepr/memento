@@ -22,23 +22,50 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <time.h>
+#include "util.h"
 #include "cluster.h"
 #include "commands.h"
 #include "networking.h"
 
 
+static void *form_cluster_thread(void *p) {
+
+    sleep(2);
+
+    while (instance.lock) {
+
+        list_node *cursor = instance.cluster->head;
+
+        while(cursor) {
+            cluster_node *n = (cluster_node *) cursor->data;
+            LOG("Trying to connect to cluster node %s:%d", n->addr, n->port);
+            if (cluster_reachable(n) == 0) {
+                char p[5];
+                sprintf(p, "%d", n->port);
+                cluster_join(n->addr, p);
+            }
+            cursor = cursor->next;
+        }
+
+        sleep(3);
+    }
+    return NULL;
+}
+
 
 int main(int argc, char **argv) {
+
     /* Initialize random seed */
     srand((unsigned int) time(NULL));
     char *address = "127.0.0.1";
     char *port = "6373";
-    char *seed_addr = NULL;
-    char *seed_port = NULL;
-    int opt, seed = 0, cluster_mode = 0;
+    char *filename = "./config";
+    int opt, cluster_mode = 0;
+    static pthread_t thread;
 
-    while((opt = getopt(argc, argv, "a:p:cSA:P:")) != -1) {
+    while((opt = getopt(argc, argv, "a:p:cf:")) != -1) {
         switch(opt) {
             case 'a':
                 address = optarg;
@@ -48,56 +75,78 @@ int main(int argc, char **argv) {
                 break;
             case 'c':
                 cluster_mode = 1;
-            case 'S':
-                seed = 1;
                 break;
-            case 'A':
-                cluster_mode = 1;
-                seed = 0;
-                seed_addr = optarg;
-            case 'P':
-                cluster_mode = 1;
-                seed = 0;
-                seed_port = optarg;
+            case 'f':
+                filename = optarg;
+                break;
             default:
-                seed = 0;
                 cluster_mode = 0;
                 break;
         }
     }
 
+    char bus_port[20];
+    int bport = GETINT(port) + 100;
+    sprintf(bus_port, "%d", bport);
+
     /* If cluster mode is enabled Initialize cluster map */
     if (cluster_mode == 1) {
-        if (seed == 1) {
-            /* map *cluster = map_create(); */
-            char *self = NULL;
-            sprintf(self, "%s:%s", address, port);
-            /* int self_fd = -1; */
-            /* map_put(cluster, self, &self_fd); */
 
-            /* initialize two sockets:
-             * - one for incoming client connections
-             * - a second for intercommunication between nodes
-             */
-            int sockets[2] = {
-                listento(address, "9999"),
-                listento(address, "19999")
-            };
+        cluster_init(1);
 
-            cluster_init(1);
+        /* read cluster configuration */
+        FILE *file = fopen(filename, "r");
+        char line[256];
+        int linenr = 0;
 
-            /* MUST HANDLE CLUSTER WIDE */
+        while (fgets(line, 256, (FILE *) file) != NULL) {
 
-            /* #<{(| handler function for incoming data |)}># */
-            /* fd_handler handler_ptr = &command_handler; */
-            /*  */
-            /* event_loop(sockets, 2, m, handler_ptr); */
+            char ip[256], pt[256];
+            linenr++;
 
-        } else {
+            /* skip comments line */
+            if (line[0] == '#') continue;
 
-            /* MUST CONNECT TO A SEED, CLUSTER WIDE */
+            if (sscanf(line, "%s %s", ip, pt) != 2) {
+                fprintf(stderr, "Syntax error, line %d\n", linenr);
+                continue;
+            }
+
+            LOG("[CFG] Line %d: IP %s PORT %s\n", linenr, ip, pt);
+
+            /* create a new node and add it to the list */
+            cluster_node *new_node =
+                (cluster_node *) shb_malloc(sizeof(cluster_node));
+            new_node->addr = ip;
+            new_node->port = GETINT(pt);
+            new_node->state = UNREACHABLE;
+            new_node->seed = 0;
+
+            /* add the node to the cluster list */
+            cluster_add_node(new_node);
 
         }
+
+        /* start forming the thread */
+        if (pthread_create(&thread, NULL, &form_cluster_thread, NULL) != 0)
+            perror("ERROR pthread");
+
+        /* initialize two sockets:
+         * - one for incoming client connections
+         * - a second for intercommunication between nodes
+         */
+        int sockets[2] = {
+            listento(address, port),
+            listento(address, bus_port)
+        };
+
+
+        /* MUST HANDLE CLUSTER WIDE */
+
+        /* handler function for incoming data */
+        fd_handler handler_ptr = &command_handler;
+        event_loop(sockets, 2, handler_ptr);
+
     } else {
 
         cluster_init(0);
@@ -106,8 +155,8 @@ int main(int argc, char **argv) {
          * - a second for intercommunication between nodes
          */
         int sockets[2] = {
-            listento(address, "9999"),
-            listento(address, "19999")
+            listento(address, port),
+            listento(address, bus_port)
         };
 
         /* handler function for incoming data */

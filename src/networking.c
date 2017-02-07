@@ -149,7 +149,7 @@ int connectto(const char *host, const char *port) {
     /* connect: create a connection with the server */
     if (connect(sfd, (const struct sockaddr *) &serveraddr, sizeof(serveraddr)) < 0) {
         perror("ERROR connecting");
-        exit(0);
+        return -1;
     }
 
     return sfd;
@@ -160,9 +160,6 @@ int connectto(const char *host, const char *port) {
  * Start an event loop waiting for incoming events on fd
  */
 int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
-
-    /* wait unitil lock is released */
-    while (instance.lock == 1) {}
 
     /* Check the number of descriptor */
     if (len < 2) {
@@ -204,6 +201,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     perror("accept");
                     exit(EXIT_FAILURE);
                 }
+
                 LOG("Connection received");
                 set_nonblocking(client);
                 instance.ev.events = EPOLLIN | EPOLLET;
@@ -217,9 +215,9 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
                     // add to members
                     if((getnameinfo(&addr, addrlen,
-                            hbuf, sizeof hbuf,
-                            sbuf, sizeof sbuf,
-                            NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
+                                    hbuf, sizeof hbuf,
+                                    sbuf, sizeof sbuf,
+                                    NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
                         LOG("New connection from %s:%s\r\n", hbuf, sbuf);
                     /* create a new cluster node */
                     cluster_node *new_node =
@@ -244,8 +242,12 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     } else free(new_node); // the node is already present and REACHABLE
                 }
             } else {
-                /* there's some data to be processed in the descriptor */
-                done = (*handler_ptr)(instance.evs[i].data.fd);
+
+                /* wait unitil lock is released */
+                if (instance.lock == 0) {
+                    /* there's some data to be processed in the descriptor */
+                    done = (*handler_ptr)(instance.evs[i].data.fd);
+                }
             }
             /* if (done) break; */
         }
