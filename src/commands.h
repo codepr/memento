@@ -42,8 +42,8 @@ typedef enum { OK, PAYLOAD_OK, ITERATE_OK,
 
 
 int check_command(char *);
-int command_handler(int, map *);
-int process_command(int, map *, char *, int, int);
+int command_handler(int);
+int process_command(char *, int, int);
 
 extern const char *commands[];
 extern const char *queries[];
@@ -56,28 +56,28 @@ int enumerates_array_len(void);
 int services_array_len(void);
 
 // Commands
-int set_command(int, map *, char *);
-int del_command(int, map *, char *);
-int inc_command(int, map *, char *);
-int incf_command(int, map *, char *);
-int dec_command(int, map *, char *);
-int decf_command(int, map *, char *);
-int append_command(int, map *, char *);
-int prepend_command(int, map *, char *);
+int set_command(char *);
+int del_command(char *);
+int inc_command(char *);
+int incf_command(char *);
+int dec_command(char *);
+int decf_command(char *);
+int append_command(char *);
+int prepend_command(char *);
 // Queries
-int get_command(int, map *, char *, int, int);
-int getp_command(int, map *, char *, int, int);
-int ttl_command(int, map *, char *, int, int);
+int get_command(char *, int, int);
+int getp_command(char *, int, int);
+int ttl_command(char *, int, int);
 // enumerates
-int count_command(int, map *, int, int);
-int keys_command(int, map *, int, int);
-int values_command(int, map *, int, int);
+int count_command(int, int);
+int keys_command(int, int);
+int values_command(int, int);
 // services
-int flush_command(int, map *);
+int flush_command(void);
 
-extern int (*cmds_func[]) (int, map *, char *);
-extern int (*qrs_func[]) (int, map *, char *, int, int);
-extern int (*enum_func[]) (int, map *, int, int);
-extern int (*srvs_func[]) (int, map *);
+extern int (*cmds_func[]) (char *);
+extern int (*qrs_func[]) (char *, int, int);
+extern int (*enum_func[]) (int, int);
+extern int (*srvs_func[]) (void);
 
 #endif

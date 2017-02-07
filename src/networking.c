@@ -34,6 +34,7 @@
 #include <arpa/inet.h>
 #include "networking.h"
 #include "commands.h"
+#include "cluster.h"
 #include "util.h"
 
 
@@ -119,9 +120,46 @@ int listento(const char *host, const char *port) {
 
 
 /*
+ * Start a connection to the specified host and port
+ */
+int connectto(const char *host, const char *port) {
+
+    int p = atoi(port);
+    struct sockaddr_in serveraddr;
+    struct hostent *server;
+
+    /* socket: create the socket */
+    int sfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sfd < 0) perror("ERROR opening socket");
+
+    /* gethostbyname: get the server's DNS entry */
+    server = gethostbyname(host);
+    if (server == NULL) {
+        fprintf(stderr, "ERROR, no such host as %s\n", host);
+        exit(EXIT_FAILURE);
+    }
+
+    /* build the server's address */
+    bzero((char *) &serveraddr, sizeof(serveraddr));
+    serveraddr.sin_family = AF_INET;
+    bcopy((char *) server->h_addr,
+            (char *) &serveraddr.sin_addr.s_addr, server->h_length);
+    serveraddr.sin_port = htons(p);
+
+    /* connect: create a connection with the server */
+    if (connect(sfd, (const struct sockaddr *) &serveraddr, sizeof(serveraddr)) < 0) {
+        perror("ERROR connecting");
+        exit(0);
+    }
+
+    return sfd;
+}
+
+
+/*
  * Start an event loop waiting for incoming events on fd
  */
-int event_loop(int *fds, size_t len, map *m, fd_handler handler_ptr) {
+int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
     /* Check the number of descriptor */
     if (len < 2) {
@@ -149,6 +187,7 @@ int event_loop(int *fds, size_t len, map *m, fd_handler handler_ptr) {
     }
 
     while(1) {
+
         if ((nfds = epoll_wait(epollfd, evs, MAX_EVENTS, -1)) == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
@@ -162,6 +201,7 @@ int event_loop(int *fds, size_t len, map *m, fd_handler handler_ptr) {
                     perror("accept");
                     exit(EXIT_FAILURE);
                 }
+                LOG("Connection received");
                 set_nonblocking(client);
                 ev.events = EPOLLIN | EPOLLET;
                 ev.data.fd = client;
@@ -169,12 +209,39 @@ int event_loop(int *fds, size_t len, map *m, fd_handler handler_ptr) {
                     perror("epoll_ctl: client connection");
                     exit(EXIT_FAILURE);
                 }
+
+                if (evs[i].data.fd == fds[1]) {
+                    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+                    // add to members
+                    if((getnameinfo(&addr, addrlen,
+                            hbuf, sizeof hbuf,
+                            sbuf, sizeof sbuf,
+                            NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
+                        LOG("New connection from %s:%s\r\n", hbuf, sbuf);
+                    char *peer = NULL;
+                    sprintf(peer, "%s:%s", hbuf, sbuf);
+                    // FIXME:must build node struct
+                    list_head_insert(instance.cluster, peer);
+                }
             } else {
-                done = (*handler_ptr)(evs[i].data.fd, m);
-                if (done) break;
+                /* there's some data to be processed in the descriptor */
+                done = (*handler_ptr)(instance.cluster_mode, evs[i].data.fd, instance.store);
+                if (instance.cluster_mode) {
+                    if (done != 0) {
+                        // must add sfd to the event loop
+                        set_nonblocking(done);
+                        ev.events = EPOLLIN | EPOLLET;
+                        ev.data.fd = done;
+                        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, done, &ev) == -1) {
+                            perror("epoll_ctl: client connection");
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    /* if (done) break; */
+                }
             }
+            /* if (done) break; */
         }
-        if (done) break;
     }
     return 0;
 }

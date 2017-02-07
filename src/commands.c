@@ -24,7 +24,8 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include "commands.h"
-/* #include "cluster.h" */
+#include "networking.h"
+#include "cluster.h"
 #include "serializer.h"
 #include "util.h"
 
@@ -110,7 +111,8 @@ int check_command(char *buffer) {
 }
 
 
-int command_handler(int fd, map *m) {
+int command_handler(int fd) {
+
     char buf[1024];
     memset(buf, 0x00, 1024);
 
@@ -118,7 +120,15 @@ int command_handler(int fd, map *m) {
 
     if (ret == -1) return 1;
     else {
-        int proc = process_command(0, m, buf, fd, fd);
+        /* If buf contains bus commands handle them */
+        if (instance.cluster_mode && strncmp(buf, "^", 1) == 0) {
+            char *host = strtok(buf, ":");
+            char *port = strtok(NULL," ");
+            return connectto(host, port);
+        } else if (instance.cluster_mode && strncmp(buf, "*", 1) == 0) {
+
+        }
+        int proc = process_command(buf, fd, fd);
         switch(proc) {
             case MAP_OK:
                 send(fd, S_OK, sizeof(S_OK), 0);
@@ -142,10 +152,10 @@ int command_handler(int fd, map *m) {
 /*
  * process incoming request from the file descriptor socket represented by
  * sock_fd, map is an array of partition, every partition store an instance
- * of hashmap, keys are distributed through consistent hashing calculated with
+ * of hashmap, keys are instance.cluster_mode through consistent hashing calculated with
  * crc32 % PARTITION_NUMBER
  */
-int process_command(int distributed, map *map, char *buffer, int sock_fd, int resp_fd) {
+int process_command(char *buffer, int sock_fd, int resp_fd) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
     // in case of empty command return nothing, next additions will be awaiting
@@ -159,25 +169,25 @@ int process_command(int distributed, map *map, char *buffer, int sock_fd, int re
     // check if the buffer contains a command and execute it
     for (int i = 0; i < commands_array_len(); i++) {
         if (strncasecmp(command, commands[i], strlen(command)) == 0) {
-            return (*cmds_func[i])(distributed, map, buffer + strlen(command) + 1);
+            return (*cmds_func[i])(buffer + strlen(command) + 1);
         }
     }
     // check if the buffer contains a query and execute it
     for (int i = 0; i < queries_array_len(); i++) {
         if (strncasecmp(command, queries[i], strlen(command)) == 0) {
-            return (*qrs_func[i])(distributed, map, buffer + strlen(command) + 1, sock_fd, resp_fd);
+            return (*qrs_func[i])(buffer + strlen(command) + 1, sock_fd, resp_fd);
         }
     }
     // check if the buffer contains an enumeration command and execute it
     for (int i = 0; i < enumerates_array_len(); i++) {
         if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
-            return (*enum_func[i])(distributed, map, sock_fd, resp_fd);
+            return (*enum_func[i])(sock_fd, resp_fd);
         }
     }
     // check if the buffer contains a service command and execute it
     for (int i = 0; i < services_array_len(); i++) {
         if (strncasecmp(command, services[i], strlen(command)) == 0) {
-            return (*srvs_func[i])(distributed, map);
+            return (*srvs_func[i])();
         }
     }
     return COMMAND_NOT_FOUND;
@@ -187,7 +197,7 @@ int process_command(int distributed, map *map, char *buffer, int sock_fd, int re
 /* Mapping tables to the commands handlers, maintaining the order defined by
  * arrays of commands
  */
-int (*cmds_func[]) (int, map *, char *) = {
+int (*cmds_func[]) (char *) = {
     &set_command,
     &del_command,
     &inc_command,
@@ -198,19 +208,19 @@ int (*cmds_func[]) (int, map *, char *) = {
     &prepend_command,
 };
 
-int (*qrs_func[]) (int, map *, char *, int, int) = {
+int (*qrs_func[]) (char *, int, int) = {
     &get_command,
     &getp_command,
     &ttl_command
 };
 
-int (*enum_func[]) (int, map *, int, int) = {
+int (*enum_func[]) (int, int) = {
     &count_command,
     &keys_command,
     &values_command
 };
 
-int (*srvs_func[]) (int, map *) = {
+int (*srvs_func[]) (void) = {
     &flush_command
 };
 
@@ -250,14 +260,14 @@ static int print_values(void * t1, void * t2) {
 }
 
 /* SET command handler, calculate in which position of the array of the
- * int distributed, partitions the key-value pair must be stored using CRC32, overwriting in case
+ * int instance.cluster_mode, partitions the key-value pair must be stored using CRC32, overwriting in case
  * of a already taken position.
  *
  * Require two arguments:
  *
  *     SET <key> <value>
  */
-int set_command(int distributed, map * map, char *command) {
+int set_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -269,7 +279,7 @@ int set_command(int distributed, map * map, char *command) {
         void *arg_2_holder = malloc(strlen((char *) arg_2));
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
-        ret = map_put(map, arg_1_holder, arg_2_holder);
+        ret = map_put(instance.store, arg_1_holder, arg_2_holder);
     }
     return ret;
 }
@@ -283,16 +293,16 @@ int set_command(int distributed, map * map, char *command) {
  *
  *     GET <key>
  */
-int get_command(int distributed, map * map, char *command, int sock_fd, int resp_fd) {
+int get_command(char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        arg_2 = map_get(map, arg_1);
+        arg_2 = map_get(instance.store, arg_1);
         if (arg_2) {
-            if (distributed == 1) {
+            if (instance.cluster_mode == 1) {
                 struct message m;
                 char response[strlen((char *) arg_2) + 2];
                 sprintf(response, "%s%s", "* ", (char *)arg_2);
@@ -318,18 +328,18 @@ int get_command(int distributed, map * map, char *command, int sock_fd, int resp
  *
  *     GETP <key>
  */
-int getp_command(int distributed, map * map, char *command, int sock_fd, int resp_fd) {
+int getp_command(char *command, int sock_fd, int resp_fd) {
     int ret = 0;
     void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        map_entry *kv = map_get_entry(map, arg_1);
+        map_entry *kv = map_get_entry(instance.store, arg_1);
         if (kv) {
             char *kvstring = (char *) malloc(strlen(kv->key) + strlen((char *) kv->val) + (sizeof(long) * 2) + 40);
             sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %ld\n",
                     (char *) kv->key, (char *) kv->val, kv->creation_time, kv->expire_time);
-            if (distributed == 1) {
+            if (instance.cluster_mode == 1) {
                 struct message m;
                 char response[strlen(kvstring) + 2];
                 sprintf(response, "%s%s", "* ", kvstring);
@@ -354,13 +364,13 @@ int getp_command(int distributed, map * map, char *command, int sock_fd, int res
  *
  *     DEL <key>
  */
-int del_command(int distributed, map * map, char *command) {
+int del_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     while (arg_1 != NULL) {
         trim(arg_1);
-        ret = map_del(map, arg_1);
+        ret = map_del(instance.store, arg_1);
         arg_1 = strtok(NULL, " ");
     }
     return ret;
@@ -377,14 +387,14 @@ int del_command(int distributed, map * map, char *command) {
  *     INC <key>   // +1 to <key>
  *     INC <key> 5 // +5 to <key>
  */
-int inc_command(int distributed, map * map, char *command) {
+int inc_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        arg_2 = map_get(map, arg_1);
+        arg_2 = map_get(instance.store, arg_1);
         if (arg_2) {
             char *s = (char *) arg_2;
             if (ISINT(s) == 1) {
@@ -411,14 +421,14 @@ int inc_command(int distributed, map * map, char *command) {
  *     INCF <key>     // +1.0 to <key>
  *     INCF <key> 5.0 // +5.0 to <key>
  */
-int incf_command(int distributed, map * map, char *command) {
+int incf_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        arg_2 = map_get(map, arg_1);
+        arg_2 = map_get(instance.store, arg_1);
         if (arg_2) {
             char *s = (char *) arg_2;
             if (is_float(s) == 1) {
@@ -445,14 +455,14 @@ int incf_command(int distributed, map * map, char *command) {
  *     DEC <key>   // -1 to <key>
  *     DEC <key> 5 // -5 to <key>
  */
-int dec_command(int distributed, map * map, char *command) {
+int dec_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        arg_2 = map_get(map, arg_1);
+        arg_2 = map_get(instance.store, arg_1);
         if (arg_2) {
             char *s = (char *) arg_2;
             if(ISINT(s) == 1) {
@@ -479,14 +489,14 @@ int dec_command(int distributed, map * map, char *command) {
  *     DECF <key>     // -1.0 to <key>
  *     DECF <key> 5.0 // -5.0 to <key>
  */
-int decf_command(int distributed, map * map, char *command) {
+int decf_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
-        arg_2 = map_get(map, arg_1);
+        arg_2 = map_get(instance.store, arg_1);
         if (arg_2) {
             char *s = (char *) arg_2;
             if(is_float(s) == 1) {
@@ -508,9 +518,9 @@ int decf_command(int distributed, map * map, char *command) {
  *
  * Doesn't require any argument.
  */
-int count_command(int distributed, map *map, int sock_fd, int resp_fd) {
+int count_command(int sock_fd, int resp_fd) {
     int len = 0;
-    len += map->size;
+    len += instance.store->size;
     char c_len[24];
     sprintf(c_len, "%d\n", len);
     send(sock_fd, c_len, 24, 0);
@@ -523,9 +533,9 @@ int count_command(int distributed, map *map, int sock_fd, int resp_fd) {
  *
  * Doesn't require any argument.
  */
-int keys_command(int distributed, map *m, int sock_fd, int resp_fd) {
-    if (m->size > 0)
-        map_iterate(m, print_keys, &sock_fd);
+int keys_command(int sock_fd, int resp_fd) {
+    if (instance.store->size > 0)
+        map_iterate(instance.store, print_keys, &sock_fd);
     return 1;
 }
 
@@ -535,9 +545,9 @@ int keys_command(int distributed, map *m, int sock_fd, int resp_fd) {
  *
  * Doesn't require any argument.
  */
-int values_command(int distributed, map *m, int sock_fd, int resp_fd) {
-    if (m->size > 0)
-        map_iterate(m, print_values, &sock_fd);
+int values_command(int sock_fd, int resp_fd) {
+    if (instance.store->size > 0)
+        map_iterate(instance.store, print_values, &sock_fd);
     return 1;
 }
 
@@ -551,7 +561,7 @@ int values_command(int distributed, map *m, int sock_fd, int resp_fd) {
  *
  *     APPEND <key> <value>
  */
-int append_command(int distributed, map *m, char *command) {
+int append_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -563,11 +573,11 @@ int append_command(int distributed, map *m, char *command) {
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
         void *val = NULL;
-        val = map_get(m, arg_1_holder);
+        val = map_get(instance.store, arg_1_holder);
         if (val) {
             remove_newline(val);
             char *append = append_string(val, arg_2_holder);
-            ret = map_put(m, arg_1_holder, append);
+            ret = map_put(instance.store, arg_1_holder, append);
         }
     } else ret = MAP_ERR;
     return ret;
@@ -582,7 +592,7 @@ int append_command(int distributed, map *m, char *command) {
  *
  *     PREPEND <key> <value>
  */
-int prepend_command(int distributed, map *m, char *command) {
+int prepend_command(char *command) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -594,11 +604,11 @@ int prepend_command(int distributed, map *m, char *command) {
         strcpy(arg_1_holder, arg_1);
         strcpy(arg_2_holder, arg_2);
         void *val = NULL;
-        val = map_get(m, arg_1_holder);
+        val = map_get(instance.store, arg_1_holder);
         if (val) {
             remove_newline(arg_2_holder);
             char *append = append_string(arg_2_holder, val);
-            ret = map_put(m, arg_1_holder, append);
+            ret = map_put(instance.store, arg_1_holder, append);
         }
     } else ret = MAP_ERR;
     return ret;
@@ -613,13 +623,13 @@ int prepend_command(int distributed, map *m, char *command) {
  *
  *     TTL <key>
  */
-int ttl_command(int distributed, map *m, char *command, int sock_fd, int resp_fd) {
+int ttl_command(char *command, int sock_fd, int resp_fd) {
     void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {
         trim(arg_1);
         map_entry *kv = (map_entry *) malloc(sizeof(map_entry));
-        kv = map_get_entry(m, arg_1);
+        kv = map_get_entry(instance.store, arg_1);
         if (kv) {
             char ttl[7];
             if (kv->has_expire_time)
@@ -637,9 +647,9 @@ int ttl_command(int distributed, map *m, char *command, int sock_fd, int resp_fd
  *
  * Doesn't require any argument.
  */
-int flush_command(int distributed, map *map) {
-    if (map != NULL)
-        map_release(map);
+int flush_command(void) {
+    if (instance.store != NULL)
+        map_release(instance.store);
     return OK;
 }
 

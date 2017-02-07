@@ -23,12 +23,31 @@
 #define CLUSTER_H
 
 #include "map.h"
+#include "list.h"
 
-#define CMD_BUFSIZE 1024
+#define CMD_BUFSIZE (1024)
 
-struct cluster_member;
-typedef struct cluster_member member;
 
-void cluster_join(int, map_t, const char *, const char *);
+typedef struct {
+    char name[64];  // node name, a 64 byte len string
+    char *addr;     // node ip address
+    int port;       // node port
+    int fd;         // node file descriptor
+} cluster_node;
+
+typedef struct {
+    int cluster_mode : 1;    // distributed flag
+    map *store;             // items of the DB
+    list *cluster;          // map of cluster nodes
+} shibui;
+
+
+extern shibui instance;
+
+
+// void cluster_join(int, map_t, const char *, const char *);
+void cluster_start(int, int *, size_t, map *, map *);
+int cluster_init(int);
+int cluster_add_node(map *, cluster_node *);
 
 #endif

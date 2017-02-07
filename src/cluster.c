@@ -19,16 +19,38 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <netdb.h>
-#include <fcntl.h>
-#include <time.h>
+/* #include <sys/socket.h> */
+/* #include <netinet/in.h> */
+/* #include <unistd.h> */
+/* #include <stdio.h> */
+/* #include <stdlib.h> */
+/* #include <string.h> */
+/* #include <netdb.h> */
+/* #include <fcntl.h> */
+/* #include <time.h> */
+#include "list.h"
 #include "cluster.h"
+#include "commands.h"
+
+
+shibui instance;
+
+int cluster_init(int distributed) {
+    instance.cluster_mode = distributed;
+    instance.store = map_create();
+    instance.cluster = list_create();
+    return 0;
+}
+
+
+/* void cluster_start(int cluster_mode, int *fds, */
+/*         size_t len, map *store, map *members) { */
+/*  */
+/*     fd_handler handler_ptr = &command_handler; */
+/*     event_loop(cluster_mode, fds, len, store, handler_ptr); */
+/*  */
+/* } */
+
 /* #include "commands.h" */
 /* #include "serializer.h" */
 /* #include "util.h" */
@@ -128,9 +150,9 @@
 /*  */
 
 
-struct cluster_member {
-    const char *name;
-    const char *host;
-    int port;
-    int master;
-};
+/* struct cluster_member { */
+/*     const char *name; */
+/*     const char *host; */
+/*     int port; */
+/*     int master; */
+/* }; */

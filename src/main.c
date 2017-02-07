@@ -23,8 +23,10 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <time.h>
+#include "cluster.h"
 #include "commands.h"
 #include "networking.h"
+
 
 
 int main(int argc, char **argv) {
@@ -67,11 +69,11 @@ int main(int argc, char **argv) {
     /* If cluster mode is enabled Initialize cluster map */
     if (cluster_mode == 1) {
         if (seed == 1) {
-            map *cluster = map_create();
+            /* map *cluster = map_create(); */
             char *self = NULL;
             sprintf(self, "%s:%s", address, port);
-            int self_fd = -1;
-            map_put(cluster, self, &self_fd);
+            /* int self_fd = -1; */
+            /* map_put(cluster, self, &self_fd); */
 
             /* initialize two sockets:
              * - one for incoming client connections
@@ -82,7 +84,7 @@ int main(int argc, char **argv) {
                 listento(address, "19999")
             };
 
-            map *m = map_create();
+            cluster_init(1);
 
             /* MUST HANDLE CLUSTER WIDE */
 
@@ -111,7 +113,7 @@ int main(int argc, char **argv) {
         /* handler function for incoming data */
         fd_handler handler_ptr = &command_handler;
 
-        event_loop(sockets, 2, m, handler_ptr);
+        event_loop(sockets, 2, handler_ptr);
 
     }
 
