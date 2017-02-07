@@ -28,15 +28,19 @@
 #define CMD_BUFSIZE (1024)
 
 
+typedef enum { REACHABLE, UNREACHABLE } state;
+
 typedef struct {
-    char name[64];  // node name, a 64 byte len string
-    char *addr;     // node ip address
-    int port;       // node port
-    int fd;         // node file descriptor
+    const char *name;   // node name, a 64 byte len string
+    char *addr;         // node ip address
+    int port;           // node port
+    int fd;             // node file descriptor
+    state state;        // current node state in the cluster
+    int seed : 1;       // define if the node is a seed or not
 } cluster_node;
 
 typedef struct {
-    int cluster_mode : 1;    // distributed flag
+    int cluster_mode : 1;   // distributed flag
     map *store;             // items of the DB
     list *cluster;          // map of cluster nodes
 } shibui;
@@ -48,6 +52,9 @@ extern shibui instance;
 // void cluster_join(int, map_t, const char *, const char *);
 void cluster_start(int, int *, size_t, map *, map *);
 int cluster_init(int);
-int cluster_add_node(map *, cluster_node *);
+void cluster_add_node(cluster_node *);
+int cluster_contained(cluster_node *);
+int cluster_reachable(cluster_node *);
+int cluster_set_state(cluster_node *, state);
 
 #endif

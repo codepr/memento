@@ -123,4 +123,3 @@ list *list_tail_insert(list *l, void *val) {
 }
 
 
-

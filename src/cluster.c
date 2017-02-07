@@ -24,10 +24,10 @@
 /* #include <unistd.h> */
 /* #include <stdio.h> */
 /* #include <stdlib.h> */
-/* #include <string.h> */
 /* #include <netdb.h> */
 /* #include <fcntl.h> */
 /* #include <time.h> */
+#include <string.h>
 #include "list.h"
 #include "cluster.h"
 #include "commands.h"
@@ -35,10 +35,77 @@
 
 shibui instance;
 
+
+/*
+ * Initialize the global shared structure, representing the cluster and the
+ * store itself
+ */
 int cluster_init(int distributed) {
     instance.cluster_mode = distributed;
     instance.store = map_create();
     instance.cluster = list_create();
+    if (instance.store != NULL)
+        return 0;
+    else return -1;
+}
+
+
+/*
+ * Add a cluster node to the global state shibui
+ */
+void cluster_add_node(cluster_node *node) {
+    instance.cluster = list_head_insert(instance.cluster, node);
+}
+
+
+/*
+ * Check if the cluster node is already present in the list
+ */
+int cluster_contained(cluster_node *node) {
+    /* Start from head node */
+    list_node *cursor = instance.cluster->head;
+    /* cycle till cursor != NULL */
+    while (cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        if ((strncmp(n->addr, node->addr, strlen(node->addr))) == 0
+                && n->port == node->port) {
+            /* found a match */
+            return 1;
+        }
+        cursor = cursor->next; // move the pointer forward
+    }
+    /* node is not present */
+    return 0;
+}
+
+
+/*
+ * Checks if the cluster node is in a REACHABLE state
+ */
+int cluster_reachable(cluster_node *node) {
+    if (node->state == REACHABLE) return 1;
+    else return 0;
+}
+
+
+/*
+ * Sets the cluster node contained in the cluster list to state st
+ */
+int cluster_set_reachable(cluster_node *node, state st) {
+    /* Start from head node */
+    list_node *cursor = instance.cluster->head;
+    /* cycle till cursor != NULL */
+    while (cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        if ((strncmp(n->addr, node->addr, strlen(node->addr))) == 0
+                && n->port == node->port) {
+            /* found a match */
+            n->state = st;
+            return 1;
+        }
+        cursor = cursor->next; // move the pointer forward
+    }
+    /* node is not present */
     return 0;
 }
 

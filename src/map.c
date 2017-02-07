@@ -79,12 +79,12 @@ static int hashmap_hash(map *in, void *key) {
 /* Auxiliary function to determine wether a descriptor is already inside a
  * subscriber array, return the index position if it is contained, -1 otherwise
  */
-static int already_in(int *arr, int fd, int size) {
-    for(int i = 0; i < size; i++) {
-        if (arr[i] == fd) return i;
-    }
-    return -1;
-}
+/* static int already_in(int *arr, int fd, int size) { */
+/*     for(int i = 0; i < size; i++) { */
+/*         if (arr[i] == fd) return i; */
+/*     } */
+/*     return -1; */
+/* } */
 
 /*
  * Doubles the size of the hashmap, and rehashes all the elements

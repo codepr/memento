@@ -218,27 +218,31 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                             sbuf, sizeof sbuf,
                             NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
                         LOG("New connection from %s:%s\r\n", hbuf, sbuf);
-                    /* char *peer = NULL; */
-                    /* sprintf(peer, "%s:%s", hbuf, sbuf); */
-                    /* // FIXME:must build node struct */
-                    /* list_head_insert(instance.cluster, peer); */
+                    /* create a new cluster node */
+                    cluster_node *new_node =
+                        (cluster_node *) shb_malloc(sizeof(cluster_node));
+                    new_node->addr = hbuf;
+                    new_node->port = GETINT(sbuf);
+                    new_node->name = random_string(64);
+
+                    if (cluster_contained(new_node) == 0) {
+                        new_node->fd = client;
+                        new_node->state = REACHABLE;
+                        new_node->seed = 0;
+                        /* add it to the cluster node list if not present*/
+                        instance.cluster =
+                            list_head_insert(instance.cluster, new_node);
+                    } else if (cluster_reachable(new_node) == 0) {
+                        /* set the node already present to state REACHABLE */
+                        if (cluster_set_state(new_node, REACHABLE) == 0)
+                            fprintf(stderr,
+                                    "[!] Failed to set node located at %s:%s to state REACHABLE",
+                                    hbuf, sbuf);
+                    } else free(new_node); // the node is already present and REACHABLE
                 }
             } else {
                 /* there's some data to be processed in the descriptor */
                 done = (*handler_ptr)(evs[i].data.fd);
-                if (instance.cluster_mode) {
-                    if (done != 0) {
-                        // must add sfd to the event loop
-                        set_nonblocking(done);
-                        ev.events = EPOLLIN | EPOLLET;
-                        ev.data.fd = done;
-                        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, done, &ev) == -1) {
-                            perror("epoll_ctl: client connection");
-                            exit(EXIT_FAILURE);
-                        }
-                    }
-                    /* if (done) break; */
-                }
             }
             /* if (done) break; */
         }

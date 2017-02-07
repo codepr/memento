@@ -120,14 +120,6 @@ int command_handler(int fd) {
 
     if (ret == -1) return 1;
     else {
-        /* If buf contains bus commands handle them */
-        if (instance.cluster_mode && strncmp(buf, "^", 1) == 0) {
-            char *host = strtok(buf, ":");
-            char *port = strtok(NULL," ");
-            return connectto(host, port);
-        } else if (instance.cluster_mode && strncmp(buf, "*", 1) == 0) {
-
-        }
         int proc = process_command(buf, fd, fd);
         switch(proc) {
             case MAP_OK:
