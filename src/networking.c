@@ -202,7 +202,6 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     exit(EXIT_FAILURE);
                 }
 
-                LOG("Connection received");
                 set_nonblocking(client);
                 instance.ev.events = EPOLLIN | EPOLLET;
                 instance.ev.data.fd = client;
@@ -218,7 +217,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                                     hbuf, sizeof hbuf,
                                     sbuf, sizeof sbuf,
                                     NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
-                        LOG("New connection from %s:%s\r\n", hbuf, sbuf);
+                        LOG("Connection request from node %s:%s\r\n", hbuf, sbuf);
                     /* create a new cluster node */
                     cluster_node *new_node =
                         (cluster_node *) shb_malloc(sizeof(cluster_node));
@@ -231,14 +230,17 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                         new_node->state = REACHABLE;
                         new_node->seed = 0;
                         /* add it to the cluster node list if not present*/
-                        instance.cluster =
-                            list_head_insert(instance.cluster, new_node);
+                        instance.ingoing =
+                            list_head_insert(instance.ingoing, new_node);
+                        /* instance.cluster = */
+                        /*     list_head_insert(instance.cluster, new_node); */
                     } else if (cluster_reachable(new_node) == 0) {
                         /* set the node already present to state REACHABLE */
                         if (cluster_set_state(new_node, REACHABLE) == 0)
-                            fprintf(stderr,
-                                    "[!] Failed to set node located at %s:%s to state REACHABLE",
+                            /* fprintf(stderr, */
+                            LOG("[!] Failed to set node located at %s:%s to state REACHABLE",
                                     hbuf, sbuf);
+                        else LOG("Node %s:%s is now REACHABLE\n", hbuf, sbuf);
                     } else free(new_node); // the node is already present and REACHABLE
                 }
             } else {

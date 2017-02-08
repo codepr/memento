@@ -45,6 +45,7 @@ int cluster_init(int distributed) {
     instance.cluster_mode = distributed;
     instance.store = map_create();
     instance.cluster = list_create();
+    instance.ingoing = list_create();
     if (distributed == 1)
         instance.lock = 1;
     else instance.lock = 0;
@@ -164,6 +165,27 @@ int cluster_join(const char *host, const char *port) {
 }
 
 
+/*
+ * Balance the cluster by giving a correct key range to every node
+ */
+void cluster_balance(void) {
+
+    /* Define a step to obtain the ranges */
+    int range = 0;
+    unsigned long len = instance.cluster->len;
+    /* int step = len % 2 == 0 ? (PARTITIONS / len) : (PARTITIONS / len) - 1; */
+    int step = PARTITIONS / len;
+    list_node *cursor = instance.cluster->head;
+
+    /* Cycle through the cluster nodes */
+    while (cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        n->range_min = range;
+        range += step;
+        n->range_max = range - 1;
+        cursor = cursor->next;
+    }
+}
 
 
 /* void cluster_start(int cluster_mode, int *fds, */

@@ -28,26 +28,30 @@
 #include <sys/epoll.h>
 
 #define CMD_BUFSIZE (1024)
+#define PARTITIONS (8192)
 
 
 typedef enum { REACHABLE, UNREACHABLE } state;
 
 typedef struct {
-    const char *name;   // node name, a 64 byte len string
-    const char *addr;   // node ip address
-    int port;           // node port
-    int fd;             // node file descriptor
-    state state;        // current node state in the cluster
-    int seed : 1;       // define if the node is a seed or not
+    const char *name;       // node name, a 64 byte len string
+    const char *addr;       // node ip address
+    int port;               // node port
+    int fd;                 // node file descriptor
+    state state;            // current node state in the cluster
+    unsigned int seed : 1;  // define if the node is a seed or not
+    unsigned int range_min; // key range lower bound
+    unsigned int range_max; // key range upper bound
 } cluster_node;
 
 typedef struct {
-    int lock : 1;                       // global lock, used in a cluster context
-    int cluster_mode : 1;               // distributed flag
+    unsigned int lock : 1;              // global lock, used in a cluster context
+    unsigned int cluster_mode : 1;      // distributed flag
     struct epoll_event ev;              // global epoll
     struct epoll_event evs[MAX_EVENTS]; // global event loop
     map *store;                         // items of the DB
     list *cluster;                      // map of cluster nodes
+    list *ingoing;                      // map of the ingoing connection as backup
 } shibui;
 
 
@@ -63,5 +67,6 @@ int cluster_contained(cluster_node *);
 int cluster_reachable(cluster_node *);
 int cluster_set_state(cluster_node *, state);
 int cluster_join(const char *, const char *);
+void cluster_balance(void);
 
 #endif

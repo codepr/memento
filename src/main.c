@@ -33,23 +33,38 @@
 static void *form_cluster_thread(void *p) {
 
     sleep(2);
+    int len = instance.cluster->len;
 
-    while (instance.lock) {
+    while (instance.lock == 1) {
 
         list_node *cursor = instance.cluster->head;
 
         while(cursor) {
             cluster_node *n = (cluster_node *) cursor->data;
-            LOG("Trying to connect to cluster node %s:%d", n->addr, n->port);
             if (cluster_reachable(n) == 0) {
+                LOG("Trying to connect to cluster node %s:%d\n", n->addr, n->port);
                 char p[5];
                 sprintf(p, "%d", n->port);
-                cluster_join(n->addr, p);
-            }
+                if(cluster_join(n->addr, p) == 1) len--;
+            } else len--;
             cursor = cursor->next;
         }
 
+        if (len <= 0) instance.lock = 0;
+
+        LOG("Instance lock: %u\n", instance.lock);
         sleep(3);
+    }
+
+    LOG("Cluster node succesfully joined to the cluster\n");
+    cluster_balance();
+    LOG("All cluster nodes are balanced\n");
+    // debug check
+    list_node *cursor = instance.cluster->head;
+    while(cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        LOG("Node: %s:%d - Min: %u Max: %u\n", n->addr, n->port, n->range_min, n->range_max);
+        cursor = cursor->next;
     }
     return NULL;
 }
@@ -61,7 +76,7 @@ int main(int argc, char **argv) {
     srand((unsigned int) time(NULL));
     char *address = "127.0.0.1";
     char *port = "6373";
-    char *filename = "./config";
+    char *filename = "./conf/cluster.conf";
     int opt, cluster_mode = 0;
     static pthread_t thread;
 
@@ -146,6 +161,7 @@ int main(int argc, char **argv) {
         /* handler function for incoming data */
         fd_handler handler_ptr = &command_handler;
         event_loop(sockets, 2, handler_ptr);
+        /* pthread_join(thread, NULL); */
 
     } else {
 
