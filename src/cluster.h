@@ -39,7 +39,7 @@ typedef struct {
     int port;               // node port
     int fd;                 // node file descriptor
     state state;            // current node state in the cluster
-    unsigned int seed : 1;  // define if the node is a seed or not
+    unsigned int self : 1;  // define if the node is a seed or not
     unsigned int range_min; // key range lower bound
     unsigned int range_max; // key range upper bound
 } cluster_node;
@@ -58,12 +58,12 @@ typedef struct {
 extern shibui instance;
 
 
-// void cluster_join(int, map_t, const char *, const char *);
 void cluster_start(int, int *, size_t, map *, map *);
-int cluster_init(int);
+int cluster_init(int, const char *, const char *, const char *);
 void cluster_add_node(cluster_node *);
 cluster_node *cluster_get_node(const char *, const char *);
 int cluster_contained(cluster_node *);
+int cluster_fd_contained(int);
 int cluster_reachable(cluster_node *);
 int cluster_set_state(cluster_node *, state);
 int cluster_join(const char *, const char *);

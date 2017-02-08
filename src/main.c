@@ -41,8 +41,14 @@ static void *form_cluster_thread(void *p) {
 
         while(cursor) {
             cluster_node *n = (cluster_node *) cursor->data;
+            /* skip self node */
+            /* if (n->self == 1) { */
+            /*     len--; */
+            /*     continue; */
+            /* } */
             if (cluster_reachable(n) == 0) {
-                LOG("Trying to connect to cluster node %s:%d\n", n->addr, n->port);
+                LOG("Trying to connect to cluster node %s:%d\n",
+                        n->addr, n->port);
                 char p[5];
                 sprintf(p, "%d", n->port);
                 if(cluster_join(n->addr, p) == 1) len--;
@@ -63,7 +69,8 @@ static void *form_cluster_thread(void *p) {
     list_node *cursor = instance.cluster->head;
     while(cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
-        LOG("Node: %s:%d - Min: %u Max: %u\n", n->addr, n->port, n->range_min, n->range_max);
+        LOG("Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
+                n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
         cursor = cursor->next;
     }
     return NULL;
@@ -77,16 +84,20 @@ int main(int argc, char **argv) {
     char *address = "127.0.0.1";
     char *port = "6373";
     char *filename = "./conf/cluster.conf";
+    char *id = "A";
     int opt, cluster_mode = 0;
     static pthread_t thread;
 
-    while((opt = getopt(argc, argv, "a:p:cf:")) != -1) {
+    while((opt = getopt(argc, argv, "a:i:p:cf:")) != -1) {
         switch(opt) {
             case 'a':
                 address = optarg;
                 break;
             case 'p':
                 port = optarg;
+                break;
+            case 'i':
+                id = optarg;
                 break;
             case 'c':
                 cluster_mode = 1;
@@ -107,7 +118,7 @@ int main(int argc, char **argv) {
     /* If cluster mode is enabled Initialize cluster map */
     if (cluster_mode == 1) {
 
-        cluster_init(1);
+        cluster_init(1, id, address, bus_port);
 
         /* read cluster configuration */
         FILE *file = fopen(filename, "r");
@@ -116,18 +127,18 @@ int main(int argc, char **argv) {
 
         while (fgets(line, 256, (FILE *) file) != NULL) {
 
-            char ip[256], pt[256];
+            char *ip = malloc(15), *pt = malloc(5), *name = malloc(256);
             linenr++;
 
             /* skip comments line */
             if (line[0] == '#') continue;
 
-            if (sscanf(line, "%s %s", ip, pt) != 2) {
+            if (sscanf(line, "%s %s %s", ip, pt, name) != 3) {
                 fprintf(stderr, "Syntax error, line %d\n", linenr);
                 continue;
             }
 
-            LOG("[CFG] Line %d: IP %s PORT %s\n", linenr, ip, pt);
+            LOG("[CFG] Line %d: IP %s PORT %s NAME %s\n", linenr, ip, pt, name);
 
             /* create a new node and add it to the list */
             cluster_node *new_node =
@@ -135,7 +146,8 @@ int main(int argc, char **argv) {
             new_node->addr = ip;
             new_node->port = GETINT(pt);
             new_node->state = UNREACHABLE;
-            new_node->seed = 0;
+            new_node->self = 0;
+            new_node->name = name;
 
             /* add the node to the cluster list */
             cluster_add_node(new_node);
@@ -165,7 +177,7 @@ int main(int argc, char **argv) {
 
     } else {
 
-        cluster_init(0);
+        cluster_init(0, id, address, bus_port);
         /* initialize two sockets:
          * - one for incoming client connections
          * - a second for intercommunication between nodes

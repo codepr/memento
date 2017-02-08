@@ -42,7 +42,7 @@ typedef enum { OK, PAYLOAD_OK, ITERATE_OK,
 
 
 int check_command(char *);
-int command_handler(int);
+int command_handler(int, int);
 int process_command(char *, int, int);
 
 extern const char *commands[];

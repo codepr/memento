@@ -33,6 +33,7 @@
 #include <sys/epoll.h>
 #include <arpa/inet.h>
 #include "networking.h"
+#include "serializer.h"
 #include "commands.h"
 #include "cluster.h"
 #include "util.h"
@@ -210,6 +211,9 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     exit(EXIT_FAILURE);
                 }
 
+                if (instance.evs[i].data.fd == fds[0])
+                    LOG("Client connected\r\n");
+
                 if (instance.evs[i].data.fd == fds[1]) {
                     char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
                     // add to members
@@ -228,7 +232,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     if (cluster_contained(new_node) == 0) {
                         new_node->fd = client;
                         new_node->state = REACHABLE;
-                        new_node->seed = 0;
+                        new_node->self = 0;
                         /* add it to the cluster node list if not present*/
                         instance.ingoing =
                             list_head_insert(instance.ingoing, new_node);
@@ -244,11 +248,15 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     } else free(new_node); // the node is already present and REACHABLE
                 }
             } else {
-
-                /* wait unitil lock is released */
+                /* there's some data to be processed
+                 * wait unitil lock is released
+                 */
                 if (instance.lock == 0) {
-                    /* there's some data to be processed in the descriptor */
-                    done = (*handler_ptr)(instance.evs[i].data.fd);
+                    /* check if the fd is contained in the cluster members */
+                    if (cluster_fd_contained(instance.evs[i].data.fd) == 1) {
+                        /* it's a message from a peer node */
+                        done = (*handler_ptr)(instance.evs[i].data.fd, 1);
+                    } else done = (*handler_ptr)(instance.evs[i].data.fd, 0);
                 }
             }
             /* if (done) break; */

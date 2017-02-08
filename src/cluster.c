@@ -41,13 +41,25 @@ shibui instance;
  * Initialize the global shared structure, representing the cluster and the
  * store itself
  */
-int cluster_init(int distributed) {
+int cluster_init(int distributed, const char *id, const char *host, const char *port) {
     instance.cluster_mode = distributed;
     instance.store = map_create();
     instance.cluster = list_create();
     instance.ingoing = list_create();
-    if (distributed == 1)
+    /* check for distribution */
+    if (distributed == 1) {
+        /* insert self node */
+        cluster_node *self =
+            (cluster_node *) malloc(sizeof(cluster_node));
+        self->name = id;
+        self->self = 1;
+        self->addr = host;
+        self->port = GETINT(port);
+        self->state = REACHABLE;
+        instance.cluster =
+            list_head_insert(instance.cluster, self);
         instance.lock = 1;
+    }
     else instance.lock = 0;
     if (instance.store != NULL)
         return 0;
@@ -78,6 +90,34 @@ int cluster_contained(cluster_node *node) {
             return 1;
         }
         cursor = cursor->next; // move the pointer forward
+    }
+    /* node is not present */
+    return 0;
+}
+
+
+/*
+ * Check if the cluster node is already present in the list
+ * FIXME: repeated code
+ */
+int cluster_fd_contained(int fd) {
+    /* Start from head node */
+    list_node *cursor = instance.cluster->head;
+    /* cycle till cursor != NULL */
+    while (cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        if (n->fd == fd) {
+            /* found a match */
+            return 1;
+        }
+        cursor = cursor->next; // move the pointer forward
+    }
+
+    cursor = instance.ingoing->head;
+    while(cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        if (n->fd == fd) return 1;
+        cursor = cursor->next;
     }
     /* node is not present */
     return 0;
@@ -159,7 +199,9 @@ int cluster_join(const char *host, const char *port) {
         new_node->port = GETINT(port);
         new_node->fd = fd;
         new_node->state = REACHABLE;
-        new_node->seed = 0;
+        new_node->self = 0;
+        instance.cluster =
+            list_head_insert(instance.cluster, new_node);
     }
     return 1;
 }
@@ -173,8 +215,10 @@ void cluster_balance(void) {
     /* Define a step to obtain the ranges */
     int range = 0;
     unsigned long len = instance.cluster->len;
-    /* int step = len % 2 == 0 ? (PARTITIONS / len) : (PARTITIONS / len) - 1; */
     int step = PARTITIONS / len;
+
+    /* sort the list */
+    instance.cluster->head = merge_sort(instance.cluster->head);
     list_node *cursor = instance.cluster->head;
 
     /* Cycle through the cluster nodes */
@@ -183,18 +227,11 @@ void cluster_balance(void) {
         n->range_min = range;
         range += step;
         n->range_max = range - 1;
+        if (cursor->next == NULL) n->range_max = PARTITIONS;
         cursor = cursor->next;
     }
 }
 
-
-/* void cluster_start(int cluster_mode, int *fds, */
-/*         size_t len, map *store, map *members) { */
-/*  */
-/*     fd_handler handler_ptr = &command_handler; */
-/*     event_loop(cluster_mode, fds, len, store, handler_ptr); */
-/*  */
-/* } */
 
 /* #include "commands.h" */
 /* #include "serializer.h" */
@@ -294,10 +331,3 @@ void cluster_balance(void) {
 /* } */
 /*  */
 
-
-/* struct cluster_member { */
-/*     const char *name; */
-/*     const char *host; */
-/*     int port; */
-/*     int master; */
-/* }; */

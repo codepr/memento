@@ -25,9 +25,11 @@
 #include <sys/socket.h>
 #include "commands.h"
 #include "networking.h"
-#include "cluster.h"
 #include "serializer.h"
+#include "hashing.h"
+#include "cluster.h"
 #include "util.h"
+
 
 /*
  * Array of commands that doesn't need a file descriptor, they exclusively
@@ -111,8 +113,37 @@ int check_command(char *buffer) {
 }
 
 
-int command_handler(int fd) {
+static int hash(char *key) {
+    /* uint32_t seed = RANDBETWEEN(0, 65535); // initial seed for murmur hashing */
+    uint32_t seed = 65133; // initial seed for murmur hashing
+    /* char *command = NULL; */
+    /* command = strtok(des_mex, " \r\n"); */
+    /* LOG("Command : %s\n", command); */
+    /* char *arg_1 = NULL; */
+    /* arg_1 = strtok(NULL, " "); */
+    if (key) {
+        char *holder = (char *) malloc(strlen(key));
+        strcpy(holder, key);
+        trim(holder);
+        int idx = murmur3_32((const uint8_t *) holder, strlen(holder), seed) % PARTITIONS;
+        LOG("Destination node: %d for key %s\r\n", idx, holder);
+        return idx;
+    } else return -1;
+    /* char *metadata = deq_mex; */
+    /* int cmd_len = *((int*) metadata) + (sizeof(int) * 2); */
+    /* struct message mm = deserialize(deq_mex); */
+    /* char *des_mex = mm.content; */
+    /* char *command = NULL; */
+    /* command = strtok(des_mex, " \r\n"); */
+    /* LOG("Command : %s\n", command); */
+    /* char *arg_1 = NULL; */
+    /* arg_1 = strtok(NULL, " "); */
+}
 
+
+int command_handler(int fd, int from_peer) {
+
+    struct message msg;
     char buf[1024];
     memset(buf, 0x00, 1024);
 
@@ -120,32 +151,97 @@ int command_handler(int fd) {
 
     if (ret == -1) return 1;
     else {
-        int proc = process_command(buf, fd, fd);
-        switch(proc) {
-            case MAP_OK:
-                send(fd, S_OK, sizeof(S_OK), 0);
-                break;
-            case MAP_ERR:
-                send(fd, S_NIL, sizeof(S_NIL), 0);
-                break;
-            case COMMAND_NOT_FOUND:
-                send(fd, S_UNK, sizeof(S_UNK), 0);
-                break;
-            case END:
-                break;
-            default:
-                break;
+
+        /* check if cluster mode is enabled */
+        if (instance.cluster_mode == 1) {
+            /*
+             * check if the buffer contains a message from another node or from
+             * a client
+             */
+            if (from_peer == 1) {
+                /* message came from a peer node, so it is serialized */
+                LOG("Received data from peer node\n");
+                char *metadata = buf;
+                int cmd_len = *((int*) metadata) + (sizeof(int) * 2);
+                struct message m = deserialize(buf);
+                LOG("Message received: %s\n", m.content);
+                /* message from another node */
+                switch (process_command(m.content, fd, fd)) {
+                    case MAP_OK:
+                        send(m.fd, S_OK, sizeof(S_OK), 0);
+                        break;
+                    case MAP_ERR:
+                        send(fd, S_NIL, sizeof(S_NIL), 0);
+                        break;
+                    case COMMAND_NOT_FOUND:
+                        send(fd, S_UNK, sizeof(S_UNK), 0);
+                        break;
+                    case END:
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+
+                /* cluster mode is not enabled, process normally */
+                char *command = NULL, *b = strdup(buf); // payload to send
+                command = strtok(buf, " \r\n");
+                LOG("Command : %s\n", command);
+                char *arg_1 = NULL;
+                arg_1 = strtok(NULL, " ");
+                LOG("Key : %s\n", arg_1);
+                int idx = hash(arg_1);
+
+                /*
+                 * send the message serialized according to the routing table
+                 * cluster
+                 */
+                list_node *cursor = instance.cluster->head;
+                while(cursor) {
+                    cluster_node *n = (cluster_node *) cursor->data;
+                    LOG("[*] Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
+                            n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
+                    if (idx >= n->range_min && idx <= n->range_max) {
+                        /* check if the range is in the current node */
+                        if (n->self == 1) {
+                            switch (process_command(b, fd, fd)) {
+                                case MAP_OK:
+                                    send(fd, S_OK, sizeof(S_OK), 0);
+                                    break;
+                                case MAP_ERR:
+                                    send(fd, S_NIL, sizeof(S_NIL), 0);
+                                    break;
+                                case COMMAND_NOT_FOUND:
+                                    send(fd, S_UNK, sizeof(S_UNK), 0);
+                                    break;
+                                case END:
+                                    break;
+                                default:
+                                    break;
+                            }
+                            break;
+                        } else {
+                            msg.content = b;
+                            msg.fd = fd;
+                            send(n->fd, serialize(msg), strlen(b) + (sizeof(int) * 2), 0);
+                            LOG("Found on cluster member %s\n", n->name);
+                            break;
+                        }
+                    }
+                    cursor = cursor->next;
+                }
+            }
         }
+        return 0;
     }
-    return 0;
 }
 
 
 /*
  * process incoming request from the file descriptor socket represented by
- * sock_fd, map is an array of partition, every partition store an instance
- * of hashmap, keys are instance.cluster_mode through consistent hashing calculated with
- * crc32 % PARTITION_NUMBER
+ * sock_fd, map is an array of partition, every partition store an instance of
+ * hashmap, keys are instance.cluster_mode through consistent hashing
+ * calculated with crc32 % PARTITION_NUMBER
  */
 int process_command(char *buffer, int sock_fd, int resp_fd) {
     char *command = NULL;

@@ -39,8 +39,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "list.h"
 #include "util.h"
+#include "cluster.h"
 
 
 /*
@@ -122,4 +124,64 @@ list *list_tail_insert(list *l, void *val) {
     return l;
 }
 
+
+/*
+ * Returns a pointer to a node near the middle of the list,
+ * after having truncated the original list before that point.
+ */
+static list_node *bisect_list(list_node *head) {
+    /* The fast pointer moves twice as fast as the slow pointer. */
+    /* The prev pointer points to the node preceding the slow pointer. */
+    list_node *fast = head, *slow = head, *prev = NULL;
+
+    while (fast != NULL && fast->next != NULL) {
+        fast = fast->next->next;
+        prev = slow;
+        slow = slow->next;
+    }
+
+    if (prev != NULL)
+        prev->next = NULL;
+
+    return slow;
+}
+
+
+/*
+ * Merges two list by using the head node of the two
+ */
+static list_node *merge_list(list_node *list1, list_node *list2) {
+    list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
+
+    while ((list1 != NULL) && (list2 != NULL)) {
+
+        /* cast to cluster_node */
+        cluster_node *n1 =
+            (cluster_node *) list1->data;
+        cluster_node *n2 =
+            (cluster_node *) list2->data;
+
+        list_node **min = ((strcmp(n1->name, n2->name)) < 0) ? &list1 : &list2;
+        list_node *next = (*min)->next;
+        tail = tail->next = *min;
+        *min = next;
+    }
+
+    tail->next = list1 ? list1 : list2;
+    return dummy_head.next;
+}
+
+
+/*
+ * Merge sort for list, based on the score_t field of every node
+ */
+list_node *merge_sort(list_node *head) {
+    list_node *list1 = head;
+    if ( (list1 == NULL) || (list1->next == NULL) )
+        return list1;
+    /* find the middle */
+    list_node *list2 = bisect_list(list1);
+
+    return merge_list(merge_sort(list1), merge_sort(list2));
+}
 
