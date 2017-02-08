@@ -46,6 +46,14 @@ int cluster_init(int distributed, const char *id, const char *host, const char *
     instance.store = map_create();
     instance.cluster = list_create();
     instance.ingoing = list_create();
+    /* initialized global epollfd */
+
+    instance.ev.events = EPOLLIN | EPOLLET;
+    if ((instance.epollfd = epoll_create1(0)) == -1) {
+        perror("epoll_create1");
+        exit(EXIT_FAILURE);
+    }
+
     /* check for distribution */
     if (distributed == 1) {
         /* insert self node */
@@ -203,6 +211,13 @@ int cluster_join(const char *host, const char *port) {
         instance.cluster =
             list_head_insert(instance.cluster, new_node);
     }
+    instance.ev.data.fd = n->fd;
+
+    if(epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, n->fd, &instance.ev) == -1) {
+        perror("epoll_ctl");
+        exit(EXIT_FAILURE);
+    }
+
     return 1;
 }
 

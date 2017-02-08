@@ -148,7 +148,9 @@ int connectto(const char *host, const char *port) {
     serveraddr.sin_port = htons(p);
 
     /* connect: create a connection with the server */
-    if (connect(sfd, (const struct sockaddr *) &serveraddr, sizeof(serveraddr)) < 0) {
+    if (connect(sfd, (const struct sockaddr *) &serveraddr,
+                sizeof(serveraddr)) < 0) {
+
         perror("ERROR connecting");
         return -1;
     }
@@ -171,17 +173,17 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
     /* struct epoll_event ev, evs[MAX_EVENTS]; */
     struct sockaddr addr;
     socklen_t addrlen = sizeof addr;
-    int epollfd, nfds, client, done = 0;
+    int nfds, client, done = 0;
 
-    if ((epollfd = epoll_create1(0)) == -1) {
-        perror("epoll_create1");
-        exit(EXIT_FAILURE);
-    }
+    /* if ((instance.epollfd = epoll_create1(0)) == -1) { */
+    /*     perror("epoll_create1"); */
+    /*     exit(EXIT_FAILURE); */
+    /* } */
 
     for (int n = 0; n < len; ++n) {
-        instance.ev.events = EPOLLIN | EPOLLET;
+        /* instance.ev.events = EPOLLIN | EPOLLET; */
         instance.ev.data.fd = fds[n];
-        if(epoll_ctl(epollfd, EPOLL_CTL_ADD, fds[n], &instance.ev) == -1) {
+        if(epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, fds[n], &instance.ev) == -1) {
             perror("epoll_ctl");
             exit(EXIT_FAILURE);
         }
@@ -189,14 +191,16 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
     while(1) {
 
-        if ((nfds = epoll_wait(epollfd, instance.evs, MAX_EVENTS, -1)) == -1) {
+        if ((nfds = epoll_wait(instance.epollfd, instance.evs, MAX_EVENTS, -1)) == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
         }
 
         for (int i = 0; i < nfds; ++i) {
             /* If fdescriptor is main server or bus server*/
-            if (instance.evs[i].data.fd == fds[0] || instance.evs[i].data.fd == fds[1]) {
+            if (instance.evs[i].data.fd == fds[0]
+                    || instance.evs[i].data.fd == fds[1]) {
+
                 if ((client = accept(instance.evs[i].data.fd,
                                 (struct sockaddr *) &addr, &addrlen)) == -1) {
                     perror("accept");
@@ -206,7 +210,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 set_nonblocking(client);
                 instance.ev.events = EPOLLIN | EPOLLET;
                 instance.ev.data.fd = client;
-                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, client, &instance.ev) == -1) {
+                if (epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, client, &instance.ev) == -1) {
                     perror("epoll_ctl: client connection");
                     exit(EXIT_FAILURE);
                 }
@@ -251,6 +255,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 /* there's some data to be processed
                  * wait unitil lock is released
                  */
+                LOG(" ***** DATA INC ***** \n");
                 if (instance.lock == 0) {
                     /* check if the fd is contained in the cluster members */
                     if (cluster_fd_contained(instance.evs[i].data.fd) == 1) {

@@ -165,21 +165,35 @@ int command_handler(int fd, int from_peer) {
                 int cmd_len = *((int*) metadata) + (sizeof(int) * 2);
                 struct message m = deserialize(buf);
                 LOG("Message received: %s\n", m.content);
-                /* message from another node */
-                switch (process_command(m.content, fd, fd)) {
-                    case MAP_OK:
-                        send(m.fd, S_OK, sizeof(S_OK), 0);
-                        break;
-                    case MAP_ERR:
-                        send(fd, S_NIL, sizeof(S_NIL), 0);
-                        break;
-                    case COMMAND_NOT_FOUND:
-                        send(fd, S_UNK, sizeof(S_UNK), 0);
-                        break;
-                    case END:
-                        break;
-                    default:
-                        break;
+
+                if (strcmp(m.content, S_OK) == 0
+                        || strcmp(m.content, S_NIL) == 0
+                        || strcmp(m.content, S_UNK) == 0) {
+                    /* answer to the original client */
+                    send(m.fd, S_OK, sizeof(S_OK), 0);
+                } else {
+                    /* message from another node */
+                    switch (process_command(m.content, fd, fd)) {
+                        case MAP_OK:
+                            msg.content = S_OK;
+                            msg.fd = m.fd;
+                            send(fd, serialize(msg), strlen(S_OK) + (sizeof(int) * 2), 0);
+                            break;
+                        case MAP_ERR:
+                            msg.content = S_NIL;
+                            msg.fd = m.fd;
+                            send(fd, serialize(msg), strlen(S_NIL) + (sizeof(int) * 2), 0);
+                            break;
+                        case COMMAND_NOT_FOUND:
+                            msg.content = S_UNK;
+                            msg.fd = m.fd;
+                            send(fd, serialize(msg), strlen(S_UNK) + (sizeof(int) * 2), 0);
+                            break;
+                        case END:
+                            break;
+                        default:
+                            break;
+                    }
                 }
             } else {
 

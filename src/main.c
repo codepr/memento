@@ -51,7 +51,7 @@ static void *form_cluster_thread(void *p) {
                         n->addr, n->port);
                 char p[5];
                 sprintf(p, "%d", n->port);
-                if(cluster_join(n->addr, p) == 1) len--;
+                if (cluster_join(n->addr, p) == 1) len--;
             } else len--;
             cursor = cursor->next;
         }

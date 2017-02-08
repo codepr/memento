@@ -47,6 +47,7 @@ typedef struct {
 typedef struct {
     unsigned int lock : 1;              // global lock, used in a cluster context
     unsigned int cluster_mode : 1;      // distributed flag
+    int epollfd;                        // file descriptor for epoll
     struct epoll_event ev;              // global epoll
     struct epoll_event evs[MAX_EVENTS]; // global event loop
     map *store;                         // items of the DB
