@@ -37,7 +37,7 @@ def main():
                 peer = v.split(":")
                 if count == idx:
                     self = "1"
-                fh.write(peer[0] + "\t" + peer[1] + "\t" + k + "\t" + self + "\n")
+                fh.write(peer[0] + "\t" + str(int(peer[1]) + 100) + "\t" + k + "\t" + self + "\n")
                 count += 1
 
             fh.close()

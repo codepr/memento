@@ -6,7 +6,7 @@ Fairly simple hashmap implementation built on top of an epoll TCP server. A toy
 project just for learning purpose, fascinated by the topic, i decided to try to
 make a simpler version of redis/memcached to better understand how it works.
 The project is a minimal Redis-like implementation with a text based protocol,
-    and like Redis, can be used as key-value in-memory store.
+and like Redis, can be used as key-value in-memory store.
 
 
 Currently supports some basic operations, all commands are case insensitive, so
@@ -42,7 +42,28 @@ not strictly uppercase.
 =========================================
 
 Still in development and surely bugged, it currently supports some commands in
-a distributed context.
+a distributed context. There aren't a replica system yet, planning to add it
+soon, currently the database can be started in cluster mode with the -c flag
+and by creating a configuration file on each node.
+
+The configuration file shall strictly follow some rules, a sample could be:
+
+    # configuration file
+    127.0.0.1   8181    node1   0
+    127.0.0.1   8182    node2   1
+    127.0.0.1   8183    node3   0
+
+every line define a node, with an IP address, a port, his id-name and a flag to
+define if the IP-PORT-ID refers to self node (ie the machine where the file reside).
+
+It is possible to generate basic configurations using the helper script
+build_cluster.py, it accepts just the address and port of every node, so
+to create 3 configuration file as the previous example just run:
+
+    $ python build_cluster.py 127.0.0.1 8081 127.0.0.1 8082 127.0.0.1 8083
+
+This instruction will generate files 'node0.conf', 'node1.conf' and 'node2.conf'
+containing each the right configuration.
 
 * BUILD
 =========================================
@@ -55,15 +76,13 @@ TCP client
 
 -m define master node in a distributed context
 
-    $ ./shibui -a <hostname> -p <port> -m
+    $ ./shibui -a <hostname> -p <port> -c
 
-Parameter <hostname> and <port> fallback to 127.0.0.1 and 6737, shibui can also be
-started as a slave node by specifying the master
+Parameter <hostname> and <port> fallback to 127.0.0.1 and 6737, shibui accept also
+a -f parameter, it allows to specify a configuration file for cluster context.
 
-    $ ./shibui -a <master-hostname> -p <port> -s
+    $ ./shibui -a <master-hostname> -p <port> -c -f ./conf/node0.conf
 
-Currently it support just a basic connection between nodes, no routing for commands
-have been developed yet.
 To build shibui-cli just make shibui-cli and run it like the following:
 
     $ ./shibui-cli <hostname> <port>
