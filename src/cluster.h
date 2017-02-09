@@ -62,9 +62,11 @@ typedef struct {
 
 extern shibui instance;
 
+extern cluster_node self;
 
-void cluster_start(int, int *, size_t, map *, map *);
+
 int cluster_init(int, const char *, const char *, const char *);
+void cluster_destroy(void);
 void cluster_add_node(cluster_node *);
 cluster_node *cluster_get_node(const char *, const char *);
 int cluster_contained(cluster_node *);

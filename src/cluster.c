@@ -62,21 +62,35 @@ int cluster_init(int distributed, const char *id, const char *host, const char *
         self.name = id;
 
         /* insert self node */
-        cluster_node *self =
-            (cluster_node *) malloc(sizeof(cluster_node));
-        self->name = id;
-        self->self = 1;
-        self->addr = host;
-        self->port = GETINT(port);
-        self->state = REACHABLE;
-        instance.cluster =
-            list_head_insert(instance.cluster, self);
+        /* cluster_node *self_node = */
+        /*     (cluster_node *) malloc(sizeof(cluster_node)); */
+        /* self_node->name = id; */
+        /* self_node->self = 1; */
+        /* self_node->addr = host; */
+        /* self_node->port = GETINT(port); */
+        /* self_node->state = REACHABLE; */
+        /* if (cluster_contained(self_node) == 1) free(self_node); */
+        /* else { */
+        /*     instance.cluster = */
+        /*         list_head_insert(instance.cluster, self_node); */
+        /* } */
         /* lock for incoming connection, till the cluster is formed and ready */
         instance.lock = 1;
     } else instance.lock = 0;
     if (instance.store != NULL)
         return 0;
     else return -1;
+}
+
+
+/*
+ * Deallocate all structures in a cluster context
+ */
+void cluster_destroy(void) {
+    /* deallocate instance containers */
+    map_release(instance.store);
+    list_release(instance.cluster);
+    list_release(instance.ingoing);
 }
 
 
@@ -98,7 +112,8 @@ int cluster_contained(cluster_node *node) {
     while (cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
         if ((strncmp(n->addr, node->addr, strlen(node->addr))) == 0
-                && n->port == node->port) {
+                && n->port == node->port
+                && (strncmp(n->name, node->name, strlen(node->name)) == 0)) {
             /* found a match */
             return 1;
         }

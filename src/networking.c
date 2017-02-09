@@ -226,7 +226,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                         (cluster_node *) shb_malloc(sizeof(cluster_node));
                     new_node->addr = hbuf;
                     new_node->port = GETINT(sbuf);
-                    /* new_node->name = random_string(64); */
+                    /* new_node->name = node_name(64); */
 
                     if (cluster_contained(new_node) == 0) {
                         new_node->fd = client;
@@ -263,7 +263,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                             if (done == END) {
                                 /* close the connection */
                                 LOG(DEBUG, "Closing connection request\n");
-                                shutdown(instance.evs[i].data.fd, SHUT_RDWR);
+                                close(instance.evs[i].data.fd);
                                 break;
                             }
                         }
@@ -272,7 +272,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                         done = (*handler_ptr)(instance.evs[i].data.fd, 0);
                         if (done == END) {
                             /* close the connection */
-                            shutdown(instance.evs[i].data.fd, SHUT_RDWR);
+                            close(instance.evs[i].data.fd);
                             break;
                         }
                     }

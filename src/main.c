@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
     /* Initialize random seed */
     srand((unsigned int) time(NULL));
     char *address = "127.0.0.1";
-    char *port = "6373";
+    char *port = "8082";
     char *filename = "./conf/cluster.conf";
     char *id = "A";
     int opt, cluster_mode = 0;
@@ -141,17 +141,19 @@ int main(int argc, char **argv) {
         while (fgets(line, 256, (FILE *) file) != NULL) {
 
             char *ip = malloc(15), *pt = malloc(5), *name = malloc(256);
+            int self_flag = 0;
             linenr++;
 
             /* skip comments line */
             if (line[0] == '#') continue;
 
-            if (sscanf(line, "%s %s %s", ip, pt, name) != 3) {
+            if (sscanf(line, "%s %s %s %d", ip, pt, name, &self_flag) != 4) {
                 fprintf(stderr, "Syntax error, line %d\n", linenr);
                 continue;
             }
 
-            LOG(DEBUG, "[CFG] Line %d: IP %s PORT %s NAME %s\n", linenr, ip, pt, name);
+            LOG(DEBUG, "[CFG] Line %d: IP %s PORT %s NAME %s SELF %d\n",
+                    linenr, ip, pt, name, self_flag);
 
             /* create a new node and add it to the list */
             cluster_node *new_node =
@@ -159,7 +161,18 @@ int main(int argc, char **argv) {
             new_node->addr = ip;
             new_node->port = GETINT(pt);
             new_node->state = UNREACHABLE;
-            new_node->self = 0;
+
+            if (self_flag == 1) {
+                /* check if the node is already present */
+                if (cluster_contained(new_node) == 1) {
+                    free(new_node);
+                    continue;
+                } else {
+                    new_node->self = 1;
+                    new_node->state = REACHABLE;
+                }
+            }
+            else new_node->self = 0;
             new_node->name = name;
 
             /* add the node to the cluster list */
@@ -170,8 +183,6 @@ int main(int argc, char **argv) {
         /* start forming the thread */
         if (pthread_create(&thread, NULL, &form_cluster_thread, NULL) != 0)
             perror("ERROR pthread");
-
-        /* pthread_join(thread, NULL); */
 
     } else {
 

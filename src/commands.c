@@ -118,7 +118,7 @@ int check_command(char *buffer) {
         }
         return COMMAND_NOT_FOUND;
     }
-    return END;
+    return 0;
 }
 
 
@@ -204,24 +204,29 @@ int command_handler(int fd, int from_peer) {
                     send(m.fd, m.content, strlen(m.content), 0);
                 } else {
                     /* message from another node */
+                    size_t len = 0;
+                    char *payload = NULL;
                     switch (process_command(m.content, fd, m.fd, 1)) {
                         case MAP_OK:
                             msg.content = S_OK;
                             msg.fd = m.fd;
                             msg.from_peer = 0;
-                            send(fd, serialize(msg), strlen(S_OK) + S_OFFSET, 0);
+                            len = strlen(S_OK) + S_OFFSET;
+                            payload = serialize(msg);
                             break;
                         case MAP_ERR:
                             msg.content = S_NIL;
                             msg.fd = m.fd;
                             msg.from_peer = 0;
-                            send(fd, serialize(msg), strlen(S_NIL) + S_OFFSET, 0);
+                            len = strlen(S_NIL) + S_OFFSET;
+                            payload = serialize(msg);
                             break;
                         case COMMAND_NOT_FOUND:
                             msg.content = S_UNK;
                             msg.fd = m.fd;
                             msg.from_peer = 0;
-                            send(fd, serialize(msg), strlen(S_UNK) + S_OFFSET, 0);
+                            len = strlen(S_UNK) + S_OFFSET;
+                            payload = serialize(msg);
                             break;
                         case END:
                             ret = END;
@@ -229,6 +234,8 @@ int command_handler(int fd, int from_peer) {
                         default:
                             break;
                     }
+                    send(fd, payload, len, 0);
+                    if (payload) free(payload);
                 }
             } else {
                 /* check the if the command is genuine */
@@ -265,7 +272,9 @@ int command_handler(int fd, int from_peer) {
                                 msg.content = b;
                                 msg.fd = fd;
                                 msg.from_peer = 0;
-                                send(n->fd, serialize(msg), strlen(b) + S_OFFSET, 0);
+                                char *payload = serialize(msg);
+                                send(n->fd, payload, strlen(b) + S_OFFSET, 0);
+                                free(payload);
                                 LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
                                 break;
                             }
@@ -280,6 +289,8 @@ int command_handler(int fd, int from_peer) {
                             break;
                         case END:
                             ret = END;
+                            break;
+                        default:
                             break;
                     }
                 }
@@ -455,13 +466,16 @@ int get_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer)
         if (arg_2) {
             if (instance.cluster_mode == 1 && from_peer == 1) {
                 struct message m;
-                /* char response[strlen((char *) arg_2) + 2]; */
-                /* sprintf(response, "%s%s", "* ", (char *) arg_2); */
-                /* m.content = response; */
-                m.content = arg_2;
+                /* adding some informations about the node host */
+                char response[strlen((char *) arg_2) + strlen(self.addr) + strlen(self.name) + 9];
+                sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, (char *) arg_2);
+                m.content = response;
+
                 m.fd = resp_fd;
                 m.from_peer = 1;
-                send(sock_fd, serialize(m), strlen(arg_2) + S_OFFSET, 0);
+                char *payload = serialize(m);
+                send(sock_fd, payload, strlen(response) + S_OFFSET, 0);
+                free(payload);
             }
             else send(sock_fd, arg_2, strlen((char *) arg_2), 0);
             ret = 1;
@@ -495,13 +509,15 @@ int getp_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer
                     (char *) kv->key, (char *) kv->val, kv->creation_time, kv->expire_time);
             if (instance.cluster_mode == 1 && from_peer == 1) {
                 struct message m;
-                /* char response[strlen(kvstring) + 2]; */
-                /* sprintf(response, "%s%s", "* ", kvstring); */
-                /* m.content = kvstring; */
-                m.content = kvstring;
+                /* adding some informations about the node host */
+                char response[strlen(kvstring) + strlen(self.addr) + strlen(self.name) + 15];
+                sprintf(response, "Node: %s:%s:%d\n%s", self.name, self.addr, self.port, kvstring);
+                m.content = response;
                 m.fd = resp_fd;
                 m.from_peer = 1;
-                send(sock_fd, serialize(m), strlen(kvstring) + (sizeof(int) * 2), 0);
+                char *payload = serialize(m);
+                send(sock_fd, payload, strlen(response) + (sizeof(int) * 2), 0);
+                free(payload);
             } else
                 send(sock_fd, kvstring, strlen(kvstring), 0);
             free(kvstring);
@@ -797,7 +813,9 @@ int ttl_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer)
                 msg.fd = resp_fd;
                 msg.content = ttl;
                 msg.from_peer = 1;
-                send(sock_fd, serialize(msg), strlen(ttl) + S_OFFSET, 0);
+                char *payload = serialize(msg);
+                send(sock_fd, payload, strlen(ttl) + S_OFFSET, 0);
+                free(payload);
             } else send(sock_fd, ttl, 7, 0);
         }
     } else return MAP_ERR;
