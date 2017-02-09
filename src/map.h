@@ -24,10 +24,6 @@
 
 #include "queue.h"
 
-// #define MAP_MISSING -3
-// #define MAP_FULL -2
-// #define MAP_OMEM -1
-// #define MAP_OK 0
 #define MAP_OK 0
 #define MAP_ERR -1
 #define MAP_FULL -2
@@ -53,8 +49,10 @@ typedef struct {
 } map_entry;
 
 
-/* An hashmap has some maximum size and current size, as well as the data to
- * hold. */
+/*
+ * An hashmap has some maximum size and current size, as well as the data to
+ * hold.
+ */
 typedef struct {
     unsigned int table_size;
     unsigned int size;

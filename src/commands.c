@@ -78,80 +78,103 @@ int services_array_len(void) {
 }
 
 
+/*
+ * Auxiliary function used to check the command coming from clients
+ * FIXME: repeated code
+ */
 int check_command(char *buffer) {
+
     char *command = strtok(buffer, " \r\n");
 
-    // in case of 'QUIT' or 'EXIT' close the connection
-    if (strncasecmp(command, "quit", strlen(command)) == 0 || strncasecmp(command, "exit", strlen(command)) == 0)
-        return END;
+    if (command) {
+        // in case of 'QUIT' or 'EXIT' close the connection
+        if (strncasecmp(command, "quit", strlen(command)) == 0
+                || strncasecmp(command, "exit", strlen(command)) == 0)
+            return END;
 
-    // check if the buffer contains a command and execute it
-    for (int i = 0; i < commands_array_len(); i++) {
-        if (strncasecmp(command, commands[i], strlen(command)) == 0) {
-            return 1;
+        // check if the buffer contains a command and execute it
+        for (int i = 0; i < commands_array_len(); i++) {
+            if (strncasecmp(command, commands[i], strlen(command)) == 0) {
+                return 1;
+            }
         }
-    }
-    // check if the buffer contains a query and execute it
-    for (int i = 0; i < queries_array_len(); i++) {
-        if (strncasecmp(command, queries[i], strlen(command)) == 0) {
-            return 1;
+        // check if the buffer contains a query and execute it
+        for (int i = 0; i < queries_array_len(); i++) {
+            if (strncasecmp(command, queries[i], strlen(command)) == 0) {
+                return 1;
+            }
         }
-    }
-    // check if the buffer contains an enumeration command and execute it
-    for (int i = 0; i < enumerates_array_len(); i++) {
-        if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
-            return 1;
+        // check if the buffer contains an enumeration command and execute it
+        for (int i = 0; i < enumerates_array_len(); i++) {
+            if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
+                return 1;
+            }
         }
-    }
-    // check if the buffer contains a service command and execute it
-    for (int i = 0; i < services_array_len(); i++) {
-        if (strncasecmp(command, services[i], strlen(command)) == 0) {
-            return 1;
+        // check if the buffer contains a service command and execute it
+        for (int i = 0; i < services_array_len(); i++) {
+            if (strncasecmp(command, services[i], strlen(command)) == 0) {
+                return 1;
+            }
         }
+        return COMMAND_NOT_FOUND;
     }
-    return COMMAND_NOT_FOUND;
+    return END;
 }
 
 
 static int hash(char *key) {
-    /* uint32_t seed = RANDBETWEEN(0, 65535); // initial seed for murmur hashing */
     uint32_t seed = 65133; // initial seed for murmur hashing
-    /* char *command = NULL; */
-    /* command = strtok(des_mex, " \r\n"); */
-    /* LOG("Command : %s\n", command); */
-    /* char *arg_1 = NULL; */
-    /* arg_1 = strtok(NULL, " "); */
     if (key) {
         char *holder = (char *) malloc(strlen(key));
         strcpy(holder, key);
         trim(holder);
-        int idx = murmur3_32((const uint8_t *) holder, strlen(holder), seed) % PARTITIONS;
-        LOG("Destination node: %d for key %s\r\n", idx, holder);
+        /* retrieve an index in the bucket range */
+        int idx = murmur3_32((const uint8_t *) holder,
+                strlen(holder), seed) % PARTITIONS;
+
+        LOG(DEBUG, "Destination node: %d for key %s\r\n", idx, holder);
         return idx;
     } else return -1;
-    /* char *metadata = deq_mex; */
-    /* int cmd_len = *((int*) metadata) + (sizeof(int) * 2); */
-    /* struct message mm = deserialize(deq_mex); */
-    /* char *des_mex = mm.content; */
-    /* char *command = NULL; */
-    /* command = strtok(des_mex, " \r\n"); */
-    /* LOG("Command : %s\n", command); */
-    /* char *arg_1 = NULL; */
-    /* arg_1 = strtok(NULL, " "); */
 }
 
 
+static int answer(int fd, int resp) {
+    switch (resp) {
+        case MAP_OK:
+            send(fd, S_OK, sizeof(S_OK), 0);
+            break;
+        case MAP_ERR:
+            send(fd, S_NIL, sizeof(S_NIL), 0);
+            break;
+        case COMMAND_NOT_FOUND:
+            send(fd, S_UNK, sizeof(S_UNK), 0);
+            break;
+        case END:
+            return END;
+            break;
+        default:
+            break;
+    }
+    return 0;
+}
+
+
+/*
+ * Handle commands incoming from clients, they either be external clients
+ * querying the store or other peer nodes of the cluster
+ */
 int command_handler(int fd, int from_peer) {
 
     struct message msg;
     char buf[1024];
     memset(buf, 0x00, 1024);
+    int ret = 0;
 
-    int ret = read(fd, buf, 1024);
+    /* read data from file descriptor socket */
+    int bytes = read(fd, buf, 1024);
 
-    if (ret == -1) return 1;
+    if (bytes == -1) return 1;
     else {
-
         /* check if cluster mode is enabled */
         if (instance.cluster_mode == 1) {
             /*
@@ -161,17 +184,21 @@ int command_handler(int fd, int from_peer) {
             if (from_peer == 1) {
 
                 /* message came from a peer node, so it is serialized */
-                LOG("Received data from peer node\n");
-                char *metadata = buf;
-                int cmd_len = *((int*) metadata) + (sizeof(int) * 2) + sizeof(unsigned int);
-                struct message m = deserialize(buf);
-                LOG("Message received: %s from_peer: %u\n", m.content, m.from_peer);
+                struct message m = deserialize(buf); // deserialize into message structure
+                LOG(DEBUG, "Received data from peer node, message: %s\n", m.content);
 
                 if (strcmp(m.content, S_OK) == 0
                         || strcmp(m.content, S_NIL) == 0
                         || strcmp(m.content, S_UNK) == 0) {
+
                     /* answer to the original client */
-                    send(m.fd, S_OK, sizeof(S_OK), 0);
+                    if (strcmp(m.content, S_OK) == 0)
+                        send(m.fd, S_OK, sizeof(S_OK), 0);
+                    else if (strcmp(m.content, S_NIL) == 0)
+                        send(m.fd, S_NIL, sizeof(S_NIL), 0);
+                    else if (strcmp(m.content, S_UNK) == 0)
+                        send(m.fd, S_UNK, sizeof(S_UNK), 0);
+
                 } else if (m.from_peer == 1) {
                     /* answer to a query operations to the original client */
                     send(m.fd, m.content, strlen(m.content), 0);
@@ -182,79 +209,86 @@ int command_handler(int fd, int from_peer) {
                             msg.content = S_OK;
                             msg.fd = m.fd;
                             msg.from_peer = 0;
-                            send(fd, serialize(msg), strlen(S_OK) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
+                            send(fd, serialize(msg), strlen(S_OK) + S_OFFSET, 0);
                             break;
                         case MAP_ERR:
                             msg.content = S_NIL;
                             msg.fd = m.fd;
                             msg.from_peer = 0;
-                            send(fd, serialize(msg), strlen(S_NIL) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
+                            send(fd, serialize(msg), strlen(S_NIL) + S_OFFSET, 0);
                             break;
                         case COMMAND_NOT_FOUND:
                             msg.content = S_UNK;
                             msg.fd = m.fd;
                             msg.from_peer = 0;
-                            send(fd, serialize(msg), strlen(S_UNK) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
+                            send(fd, serialize(msg), strlen(S_UNK) + S_OFFSET, 0);
                             break;
                         case END:
+                            ret = END;
                             break;
                         default:
                             break;
                     }
                 }
             } else {
+                /* check the if the command is genuine */
+                int check = check_command(strdup(buf));
 
-                /* message came directly from a client */
-                char *command = NULL, *b = strdup(buf); // payload to send
-                command = strtok(buf, " \r\n");
-                LOG("Command : %s\n", command);
-                char *arg_1 = NULL;
-                arg_1 = strtok(NULL, " ");
-                LOG("Key : %s\n", arg_1);
-                int idx = hash(arg_1);
+                if (check == 1) {
 
-                /*
-                 * send the message serialized according to the routing table
-                 * cluster
-                 */
-                list_node *cursor = instance.cluster->head;
-                while(cursor) {
-                    cluster_node *n = (cluster_node *) cursor->data;
-                    LOG("[*] Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
-                            n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
-                    if (idx >= n->range_min && idx <= n->range_max) {
-                        /* check if the range is in the current node */
-                        if (n->self == 1) {
-                            switch (process_command(b, fd, fd, 0)) {
-                                case MAP_OK:
-                                    send(fd, S_OK, sizeof(S_OK), 0);
-                                    break;
-                                case MAP_ERR:
-                                    send(fd, S_NIL, sizeof(S_NIL), 0);
-                                    break;
-                                case COMMAND_NOT_FOUND:
-                                    send(fd, S_UNK, sizeof(S_UNK), 0);
-                                    break;
-                                case END:
-                                    break;
-                                default:
-                                    break;
+                    /* message came directly from a client */
+                    char *command = NULL, *b = strdup(buf); // payload to send
+                    command = strtok(buf, " \r\n");
+                    LOG(DEBUG, "Command : %s\n", command);
+
+                    /* command is handled */
+                    char *arg_1 = NULL;
+                    arg_1 = strtok(NULL, " ");
+                    LOG(DEBUG, "Key : %s\n", arg_1);
+                    int idx = hash(arg_1);
+
+                    /*
+                     * send the message serialized according to the routing table
+                     * cluster
+                     */
+                    list_node *cursor = instance.cluster->head;
+                    while(cursor) {
+                        cluster_node *n = (cluster_node *) cursor->data;
+                        LOG(DEBUG, "[*] Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
+                                n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
+                        if (idx >= n->range_min && idx <= n->range_max) {
+                            /* check if the range is in the current node */
+                            if (n->self == 1) {
+                                answer(fd, process_command(b, fd, fd, 0));
+                                break;
+                            } else {
+                                msg.content = b;
+                                msg.fd = fd;
+                                msg.from_peer = 0;
+                                send(n->fd, serialize(msg), strlen(b) + S_OFFSET, 0);
+                                LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
+                                break;
                             }
-                            break;
-                        } else {
-                            msg.content = b;
-                            msg.fd = fd;
-                            msg.from_peer = 0;
-                            send(n->fd, serialize(msg), strlen(b) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
-                            LOG("Found on cluster member %s\n", n->name);
-                            break;
                         }
+                        cursor = cursor->next;
                     }
-                    cursor = cursor->next;
+                } else {
+                    /* command received is not recognized or is a quit command */
+                    switch (check) {
+                        case COMMAND_NOT_FOUND:
+                            send(fd, S_UNK, strlen(S_UNK), 0);
+                            break;
+                        case END:
+                            ret = END;
+                            break;
+                    }
                 }
             }
+        } else {
+            /* Single node instance, cluster is not enabled */
+            ret = answer(fd, process_command(buf, fd, fd, 0));
         }
-        return 0;
+        return ret;
     }
 }
 
@@ -268,12 +302,15 @@ int command_handler(int fd, int from_peer) {
 int process_command(char *buffer, int sock_fd, int resp_fd, unsigned int from_peer) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
-    // in case of empty command return nothing, next additions will be awaiting
-    // for incoming chunks
+    /*
+     * In case of empty command return nothing, next additions will be awaiting
+     * for incoming chunks
+     */
     if (!command)
         return 1;
     // in case of 'QUIT' or 'EXIT' close the connection
-    if (strncasecmp(command, "quit", strlen(command)) == 0 || strncasecmp(command, "exit", strlen(command)) == 0)
+    if (strncasecmp(command, "quit", strlen(command)) == 0
+            || strncasecmp(command, "exit", strlen(command)) == 0)
         return END;
 
     // check if the buffer contains a command and execute it
@@ -285,7 +322,8 @@ int process_command(char *buffer, int sock_fd, int resp_fd, unsigned int from_pe
     // check if the buffer contains a query and execute it
     for (int i = 0; i < queries_array_len(); i++) {
         if (strncasecmp(command, queries[i], strlen(command)) == 0) {
-            return (*qrs_func[i])(buffer + strlen(command) + 1, sock_fd, resp_fd, from_peer);
+            return (*qrs_func[i])(buffer + strlen(command) + 1,
+                    sock_fd, resp_fd, from_peer);
         }
     }
     // check if the buffer contains an enumeration command and execute it
@@ -369,9 +407,11 @@ static int print_values(void * t1, void * t2) {
     return MAP_OK;
 }
 
-/* SET command handler, calculate in which position of the array of the
- * int instance.cluster_mode, partitions the key-value pair must be stored using CRC32, overwriting in case
- * of a already taken position.
+
+/*
+ * SET command handler, calculate in which position of the array of the int
+ * instance.cluster_mode, partitions the key-value pair must be stored using
+ * CRC32, overwriting in case of a already taken position.
  *
  * Require two arguments:
  *
@@ -393,6 +433,7 @@ int set_command(char *command) {
     }
     return ret;
 }
+
 
 /*
  * GET command handler, calculate in which position of the array of the
@@ -420,7 +461,7 @@ int get_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer)
                 m.content = arg_2;
                 m.fd = resp_fd;
                 m.from_peer = 1;
-                send(sock_fd, serialize(m), strlen(arg_2) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
+                send(sock_fd, serialize(m), strlen(arg_2) + S_OFFSET, 0);
             }
             else send(sock_fd, arg_2, strlen((char *) arg_2), 0);
             ret = 1;
@@ -428,6 +469,7 @@ int get_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer)
     } else ret = MAP_ERR;
     return ret;
 }
+
 
 /*
  * GETP command handler, calculate in which position of the array of the
@@ -447,7 +489,8 @@ int getp_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer
         trim(arg_1);
         map_entry *kv = map_get_entry(instance.store, arg_1);
         if (kv) {
-            char *kvstring = (char *) malloc(strlen(kv->key) + strlen((char *) kv->val) + (sizeof(long) * 2) + 40);
+            char *kvstring = (char *) malloc(strlen(kv->key)
+                    + strlen((char *) kv->val) + (sizeof(long) * 2) + 40);
             sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %ld\n",
                     (char *) kv->key, (char *) kv->val, kv->creation_time, kv->expire_time);
             if (instance.cluster_mode == 1 && from_peer == 1) {
@@ -749,7 +792,13 @@ int ttl_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer)
                 sprintf(ttl, "%ld\n", kv->expire_time / 1000);
             else
                 sprintf(ttl, "%d\n", -1);
-            send(sock_fd, ttl, 7, 0);
+            if (instance.cluster_mode == 1 && from_peer == 1) {
+                struct message msg;
+                msg.fd = resp_fd;
+                msg.content = ttl;
+                msg.from_peer = 1;
+                send(sock_fd, serialize(msg), strlen(ttl) + S_OFFSET, 0);
+            } else send(sock_fd, ttl, 7, 0);
         }
     } else return MAP_ERR;
     return 0;

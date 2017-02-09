@@ -23,6 +23,10 @@
 #ifndef SERIALIZER_H
 #define SERIALIZER_H
 
+
+#define S_OFFSET (sizeof(int) * 2) + sizeof(unsigned int)
+
+
 /*
  * Structure representing a message, used to exchange data between nodes
  * using internal bus

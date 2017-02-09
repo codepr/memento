@@ -113,8 +113,8 @@ int listento(const char *host, const char *port) {
     }
 
     if (host == NULL)
-        LOG("Instance listening on 127.0.0.1:%s\n", port);
-    else LOG("Instance listening on %s:%s\n", host, port);
+        LOG(DEBUG, "Instance listening on 127.0.0.1:%s\n", port);
+    else LOG(DEBUG, "Instance listening on %s:%s\n", host, port);
 
     return sfd;
 }
@@ -170,18 +170,11 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
         exit(EXIT_FAILURE);
     }
 
-    /* struct epoll_event ev, evs[MAX_EVENTS]; */
     struct sockaddr addr;
     socklen_t addrlen = sizeof addr;
     int nfds, client, done = 0;
 
-    /* if ((instance.epollfd = epoll_create1(0)) == -1) { */
-    /*     perror("epoll_create1"); */
-    /*     exit(EXIT_FAILURE); */
-    /* } */
-
     for (int n = 0; n < len; ++n) {
-        /* instance.ev.events = EPOLLIN | EPOLLET; */
         instance.ev.data.fd = fds[n];
         if(epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, fds[n], &instance.ev) == -1) {
             perror("epoll_ctl");
@@ -201,6 +194,8 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
             if (instance.evs[i].data.fd == fds[0]
                     || instance.evs[i].data.fd == fds[1]) {
 
+                /* connection request incoming */
+
                 if ((client = accept(instance.evs[i].data.fd,
                                 (struct sockaddr *) &addr, &addrlen)) == -1) {
                     perror("accept");
@@ -216,7 +211,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 }
 
                 if (instance.evs[i].data.fd == fds[0])
-                    LOG("Client connected\r\n");
+                    LOG(DEBUG, "Client connected\r\n");
 
                 if (instance.evs[i].data.fd == fds[1]) {
                     char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
@@ -225,7 +220,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                                     hbuf, sizeof hbuf,
                                     sbuf, sizeof sbuf,
                                     NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
-                        LOG("Connection request from node %s:%s\r\n", hbuf, sbuf);
+                        LOG(DEBUG, "Connection request from node %s:%s\r\n", hbuf, sbuf);
                     /* create a new cluster node */
                     cluster_node *new_node =
                         (cluster_node *) shb_malloc(sizeof(cluster_node));
@@ -245,26 +240,44 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     } else if (cluster_reachable(new_node) == 0) {
                         /* set the node already present to state REACHABLE */
                         if (cluster_set_state(new_node, REACHABLE) == 0)
-                            /* fprintf(stderr, */
-                            LOG("[!] Failed to set node located at %s:%s to state REACHABLE",
+                            LOG(DEBUG, "[!] Failed to set node located at %s:%s to state REACHABLE",
                                     hbuf, sbuf);
-                        else LOG("Node %s:%s is now REACHABLE\n", hbuf, sbuf);
+                        else LOG(DEBUG, "Node %s:%s is now REACHABLE\n", hbuf, sbuf);
                     } else free(new_node); // the node is already present and REACHABLE
                 }
             } else {
-                /* there's some data to be processed
-                 * wait unitil lock is released
+                /*
+                 * There's some data to be processed wait unitil lock is
+                 * released
                  */
-                LOG(" ***** DATA INC ***** \n");
                 if (instance.lock == 0) {
-                    /* check if the fd is contained in the cluster members */
-                    if (cluster_fd_contained(instance.evs[i].data.fd) == 1) {
-                        /* it's a message from a peer node */
-                        done = (*handler_ptr)(instance.evs[i].data.fd, 1);
-                    } else done = (*handler_ptr)(instance.evs[i].data.fd, 0);
+                    /* if cluster mode is enabled */
+                    if (instance.cluster_mode == 1) {
+                        /* check if the fd is contained in the cluster members */
+                        if (cluster_fd_contained(instance.evs[i].data.fd) == 1) {
+                            /* it's a message from a peer node */
+                            done = (*handler_ptr)(instance.evs[i].data.fd, 1);
+                        } else {
+                            /* it's a message from a connected client */
+                            done = (*handler_ptr)(instance.evs[i].data.fd, 0);
+                            if (done == END) {
+                                /* close the connection */
+                                LOG(DEBUG, "Closing connection request\n");
+                                shutdown(instance.evs[i].data.fd, SHUT_RDWR);
+                                break;
+                            }
+                        }
+                    } else {
+                        /* cluster mode is not enabled, i.e. single node instance */
+                        done = (*handler_ptr)(instance.evs[i].data.fd, 0);
+                        if (done == END) {
+                            /* close the connection */
+                            shutdown(instance.evs[i].data.fd, SHUT_RDWR);
+                            break;
+                        }
+                    }
                 }
             }
-            /* if (done) break; */
         }
     }
     return 0;

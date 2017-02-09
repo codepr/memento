@@ -25,12 +25,17 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+
 #define GETINT(x) to_int(x)
 #define GETFLOAT(x) to_float(x)
 #define GETDOUBLE(x) to_double(x)
 #define ISINT(x) is_integer(x)
 #define CRC32(c, x) crc32(c, x)
 #define RANDBETWEEN(A,B) A + rand()/(RAND_MAX/(B - A))
+
+
+/* Log level */
+typedef enum { DEBUG, ERR, INFO } loglevel;
 
 void *shb_malloc(size_t);
 unsigned long crc32(const unsigned char *, unsigned int);
@@ -40,9 +45,9 @@ int is_integer(const char *);
 int is_float(const char *);
 int to_int(const char *);
 double to_double(const char *);
-const char *random_string(unsigned int);
+const char *node_name(unsigned int);
 
-void s_log(const char *, ...);
+void s_log(loglevel, const char *, ...);
 
 #define LOG(...) s_log( __VA_ARGS__ )
 

@@ -32,40 +32,44 @@
 
 static void *form_cluster_thread(void *p) {
 
+    int len;
     sleep(2);
-    int len = instance.cluster->len;
 
     while (instance.lock == 1) {
 
         list_node *cursor = instance.cluster->head;
 
         while(cursor) {
+            /* count for UNREACHABLE nodes */
+            len = cluster_unreachable_count();
             cluster_node *n = (cluster_node *) cursor->data;
             if (cluster_reachable(n) == 0) {
-                LOG("Trying to connect to cluster node %s:%d\n",
+                LOG(DEBUG, "Trying to connect to cluster node %s:%d\n",
                         n->addr, n->port);
                 char p[5];
                 sprintf(p, "%d", n->port);
                 if (cluster_join(n->addr, p) == 1) len--;
-            } else len--;
+            } else {
+                if (n->self == 0) len--;
+            }
             cursor = cursor->next;
         }
 
-        if (len <= 0) instance.lock = 0;
+        if (len <= 0) instance.lock = 0; // all nodes are connected, release lock
 
-        LOG("Instance lock: %u\n", instance.lock);
+        LOG(DEBUG, "Instance lock: %u\n", instance.lock);
         sleep(3);
     }
 
-    LOG("Cluster node succesfully joined to the cluster\n");
+    LOG(DEBUG, "Cluster node succesfully joined to the cluster\n");
     cluster_balance();
-    LOG("All cluster nodes are balanced\n");
+    LOG(DEBUG, "All cluster nodes are balanced\n");
     // debug check
     // FIXME: remove
     list_node *cursor = instance.cluster->head;
     while(cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
-        LOG("Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
+        LOG(DEBUG, "Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
                 n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
         cursor = cursor->next;
     }
@@ -147,7 +151,7 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            LOG("[CFG] Line %d: IP %s PORT %s NAME %s\n", linenr, ip, pt, name);
+            LOG(DEBUG, "[CFG] Line %d: IP %s PORT %s NAME %s\n", linenr, ip, pt, name);
 
             /* create a new node and add it to the list */
             cluster_node *new_node =
@@ -167,16 +171,16 @@ int main(int argc, char **argv) {
         if (pthread_create(&thread, NULL, &form_cluster_thread, NULL) != 0)
             perror("ERROR pthread");
 
-        event_loop(sockets, 2, handler_ptr);
         /* pthread_join(thread, NULL); */
 
     } else {
 
         /* single node mode */
         cluster_init(0, id, address, bus_port);
-        event_loop(sockets, 2, handler_ptr);
-
     }
+
+    /* start the main listen loop */
+    event_loop(sockets, 2, handler_ptr);
 
     return 0;
 }

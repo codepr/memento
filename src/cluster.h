@@ -24,6 +24,7 @@
 
 #include "map.h"
 #include "list.h"
+#include "util.h"
 #include "networking.h"
 #include <sys/epoll.h>
 
@@ -55,6 +56,7 @@ typedef struct {
     map *store;                         // items of the DB
     list *cluster;                      // map of cluster nodes
     list *ingoing;                      // map of the ingoing connection as backup
+    loglevel log_level;                 // log level of the entire system
 } shibui;
 
 
@@ -68,6 +70,7 @@ cluster_node *cluster_get_node(const char *, const char *);
 int cluster_contained(cluster_node *);
 int cluster_fd_contained(int);
 int cluster_reachable(cluster_node *);
+int cluster_unreachable_count(void);
 int cluster_set_state(cluster_node *, state);
 int cluster_join(const char *, const char *);
 void cluster_balance(void);

@@ -24,8 +24,11 @@
 #include "list.h"
 #include "cluster.h"
 
-
+/* global state store instance */
 shibui instance;
+
+/* self reference in a cluster context */
+cluster_node self;
 
 
 /*
@@ -34,10 +37,12 @@ shibui instance;
  */
 int cluster_init(int distributed, const char *id, const char *host, const char *port) {
 
+    /* Initialize instance containers */
     instance.cluster_mode = distributed;
     instance.store = map_create();
     instance.cluster = list_create();
     instance.ingoing = list_create();
+    instance.log_level = DEBUG;
 
     /* initialized global epollfd */
     instance.ev.events = EPOLLIN | EPOLLET;
@@ -48,6 +53,14 @@ int cluster_init(int distributed, const char *id, const char *host, const char *
 
     /* check for distribution */
     if (distributed == 1) {
+
+        /* Initialize self reference */
+        self.state = REACHABLE;
+        self.self = 1;
+        self.addr = host;
+        self.port = GETINT(port);
+        self.name = id;
+
         /* insert self node */
         cluster_node *self =
             (cluster_node *) malloc(sizeof(cluster_node));
@@ -58,9 +71,9 @@ int cluster_init(int distributed, const char *id, const char *host, const char *
         self->state = REACHABLE;
         instance.cluster =
             list_head_insert(instance.cluster, self);
+        /* lock for incoming connection, till the cluster is formed and ready */
         instance.lock = 1;
-    }
-    else instance.lock = 0;
+    } else instance.lock = 0;
     if (instance.store != NULL)
         return 0;
     else return -1;
@@ -132,6 +145,20 @@ int cluster_reachable(cluster_node *node) {
     else return 0;
 }
 
+
+/*
+ * Count the number of cluster nodes in a state of 'UNREACHABLE'
+ */
+int cluster_unreachable_count(void) {
+    list_node *cursor = instance.cluster->head;
+    int count = 0;
+
+    while(cursor) {
+        if (((cluster_node *) cursor->data)->state == UNREACHABLE) count++;
+        cursor = cursor->next;
+    }
+    return count;
+}
 
 /*
  * Sets the cluster node contained in the cluster list to state st

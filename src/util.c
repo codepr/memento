@@ -26,6 +26,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include "util.h"
+#include "cluster.h"
 
 
 #define CHECK_PTR(ptr)                  \
@@ -33,7 +34,7 @@
         perror("No memory available");  \
         return NULL;                    \
     }                                   \
-    return ptr;
+return ptr;
 
 
 /* The implementation here was originally done by Gary S. Brown. Slighltly
@@ -242,17 +243,36 @@ const char *node_name(unsigned int len) {
 }
 
 
-void s_log(const char *info, ...) {
-    va_list argptr;
-    va_start(argptr, info);
-    char time_buff[100];
-    time_t now = time(0);
-    strftime(time_buff, 100, " [%Y-%m-%d %H:%M:%S] - ", localtime(&now));
-    char content[strlen(info) + strlen(time_buff)];
-    memset(content, 0x00, strlen(content));
-    strcat(content, time_buff);
-    strcat(content, info);
-    vfprintf(stdout, content, argptr);
-    va_end(argptr);
+void s_log(loglevel level, const char *info, ...) {
+    /* Print log only if level is the same of the instance loglevel */
+    if (level == instance.log_level) {
+        va_list argptr;
+        va_start(argptr, info);
+        char time_buff[100];
+        char prefix[5];
+        switch(level) {
+            case DEBUG:
+                sprintf(prefix, "[DBG]");
+                break;
+            case ERR:
+                sprintf(prefix, "[INF]");
+                break;
+            case INFO:
+                sprintf(prefix, "[ERR]");
+                break;
+            default:
+                sprintf(prefix, "[INF]");
+                break;
+        }
+        time_t now = time(0);
+        strftime(time_buff, 100, "[%Y-%m-%d %H:%M:%S] - ", localtime(&now));
+        char content[strlen(prefix) + strlen(info) + strlen(time_buff)];
+        memset(content, 0x00, strlen(content));
+        strcat(content, prefix);
+        strcat(content, time_buff);
+        strcat(content, info);
+        vfprintf(stdout, content, argptr);
+        va_end(argptr);
+    }
 }
 
