@@ -19,32 +19,52 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+
 #include <stdlib.h>
 #include <string.h>
 #include "serializer.h"
 
+
+/*
+ * Pack a message structure in an array of bytes, following a simple convention:
+ *
+ * [ 4 bytes ] | [ 4 bytes ] | [ 2 bytes ] | [ content len bytes ]
+ * ----------- | ----------- | ----------- | --------------------
+ *  cont. len  |  desc. len  |  flag len   |  remanining content
+ * ----------- | ----------- | ----------- | --------------------
+ *
+ *  This way it's easier to pass it around through sockets
+ */
 char *serialize(struct message msg) {
-    int s_len  = strlen(msg.content);
-    int t_len  = sizeof(int) + s_len;
-    char *serialized = malloc(sizeof(char) * (t_len + sizeof(int)));
+    int mlen = strlen(msg.content);
+    int flen = sizeof(int) + sizeof(unsigned int) + mlen ; // structure whole len
+    char *serialized = malloc(sizeof(char) * (flen + sizeof(int))); // serialization whole len
     char *metadata = serialized;
-    char *fd = serialized + sizeof(int);
-    char *content = fd + sizeof(int);
-    *((int*) metadata) = s_len;
+    char *fd = serialized + sizeof(int);        // space for descriptor
+    char *fp = fd + sizeof(int);                // space for flag
+    char *content = fp + sizeof(unsigned int);  // space for content message
+    *((int*) metadata) = mlen;
     *((int*) fd) = msg.fd;
-    strncpy(content, msg.content, s_len);
+    *((unsigned int*) fp) = msg.from_peer;
+    strncpy(content, msg.content, mlen);
     return serialized;
 }
 
+
+/*
+ * Unpack an array of bytes reconstructing the original message structure
+ */
 struct message deserialize(char *serialized_msg) {
-    char* metadata = serialized_msg;
-    char* fd = metadata + sizeof(int);
-    char* content = fd + sizeof(int);
+    char *metadata = serialized_msg;
+    char *fd = metadata + sizeof(int);
+    char *fp = fd + sizeof(int);
+    char *content = fp + sizeof(unsigned int);
     struct message msg;
-    int s_len = *((int*) metadata);
-    msg.fd = *((int*) fd);
-    msg.content = malloc((s_len + 1) * sizeof(char));
-    strncpy(msg.content, content, s_len);
-    msg.content[s_len] = '\0';
+    int mlen = *((int *) metadata);
+    msg.fd = *((int *) fd);
+    msg.from_peer = *((unsigned int *) fp);
+    msg.content = malloc((mlen + 1) * sizeof(char));
+    strncpy(msg.content, content, mlen);
+    msg.content[mlen] = '\0';
     return msg;
 }

@@ -28,11 +28,12 @@
 #include <sys/epoll.h>
 
 #define CMD_BUFSIZE (1024)
-#define PARTITIONS (8192)
+#define PARTITIONS (8192)   // whole keyspace
 
 
 typedef enum { REACHABLE, UNREACHABLE } state;
 
+/* Cluster node structure */
 typedef struct {
     const char *name;       // node name, a 64 byte len string
     const char *addr;       // node ip address
@@ -44,6 +45,7 @@ typedef struct {
     unsigned int range_max; // key range upper bound
 } cluster_node;
 
+/* Global shared state of the system, it represents the distributed map */
 typedef struct {
     unsigned int lock : 1;              // global lock, used in a cluster context
     unsigned int cluster_mode : 1;      // distributed flag

@@ -41,11 +41,6 @@ static void *form_cluster_thread(void *p) {
 
         while(cursor) {
             cluster_node *n = (cluster_node *) cursor->data;
-            /* skip self node */
-            /* if (n->self == 1) { */
-            /*     len--; */
-            /*     continue; */
-            /* } */
             if (cluster_reachable(n) == 0) {
                 LOG("Trying to connect to cluster node %s:%d\n",
                         n->addr, n->port);
@@ -66,6 +61,7 @@ static void *form_cluster_thread(void *p) {
     cluster_balance();
     LOG("All cluster nodes are balanced\n");
     // debug check
+    // FIXME: remove
     list_node *cursor = instance.cluster->head;
     while(cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
@@ -115,6 +111,19 @@ int main(int argc, char **argv) {
     int bport = GETINT(port) + 100;
     sprintf(bus_port, "%d", bport);
 
+    /* initialize two sockets:
+     * - one for incoming client connections
+     * - a second for intercommunication between nodes
+     */
+    int sockets[2] = {
+        listento(address, port),
+        listento(address, bus_port)
+    };
+
+
+    /* handler function for incoming data */
+    fd_handler handler_ptr = &command_handler;
+
     /* If cluster mode is enabled Initialize cluster map */
     if (cluster_mode == 1) {
 
@@ -158,38 +167,13 @@ int main(int argc, char **argv) {
         if (pthread_create(&thread, NULL, &form_cluster_thread, NULL) != 0)
             perror("ERROR pthread");
 
-        /* initialize two sockets:
-         * - one for incoming client connections
-         * - a second for intercommunication between nodes
-         */
-        int sockets[2] = {
-            listento(address, port),
-            listento(address, bus_port)
-        };
-
-
-        /* MUST HANDLE CLUSTER WIDE */
-
-        /* handler function for incoming data */
-        fd_handler handler_ptr = &command_handler;
         event_loop(sockets, 2, handler_ptr);
         /* pthread_join(thread, NULL); */
 
     } else {
 
+        /* single node mode */
         cluster_init(0, id, address, bus_port);
-        /* initialize two sockets:
-         * - one for incoming client connections
-         * - a second for intercommunication between nodes
-         */
-        int sockets[2] = {
-            listento(address, port),
-            listento(address, bus_port)
-        };
-
-        /* handler function for incoming data */
-        fd_handler handler_ptr = &command_handler;
-
         event_loop(sockets, 2, handler_ptr);
 
     }

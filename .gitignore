@@ -16,3 +16,4 @@ shibui-cli
 *.hex
 *.dSYM/
 *.su
+tags

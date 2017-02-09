@@ -159,35 +159,42 @@ int command_handler(int fd, int from_peer) {
              * a client
              */
             if (from_peer == 1) {
+
                 /* message came from a peer node, so it is serialized */
                 LOG("Received data from peer node\n");
                 char *metadata = buf;
-                int cmd_len = *((int*) metadata) + (sizeof(int) * 2);
+                int cmd_len = *((int*) metadata) + (sizeof(int) * 2) + sizeof(unsigned int);
                 struct message m = deserialize(buf);
-                LOG("Message received: %s\n", m.content);
+                LOG("Message received: %s from_peer: %u\n", m.content, m.from_peer);
 
                 if (strcmp(m.content, S_OK) == 0
                         || strcmp(m.content, S_NIL) == 0
                         || strcmp(m.content, S_UNK) == 0) {
                     /* answer to the original client */
                     send(m.fd, S_OK, sizeof(S_OK), 0);
+                } else if (m.from_peer == 1) {
+                    /* answer to a query operations to the original client */
+                    send(m.fd, m.content, strlen(m.content), 0);
                 } else {
                     /* message from another node */
-                    switch (process_command(m.content, fd, fd)) {
+                    switch (process_command(m.content, fd, m.fd, 1)) {
                         case MAP_OK:
                             msg.content = S_OK;
                             msg.fd = m.fd;
-                            send(fd, serialize(msg), strlen(S_OK) + (sizeof(int) * 2), 0);
+                            msg.from_peer = 0;
+                            send(fd, serialize(msg), strlen(S_OK) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
                             break;
                         case MAP_ERR:
                             msg.content = S_NIL;
                             msg.fd = m.fd;
-                            send(fd, serialize(msg), strlen(S_NIL) + (sizeof(int) * 2), 0);
+                            msg.from_peer = 0;
+                            send(fd, serialize(msg), strlen(S_NIL) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
                             break;
                         case COMMAND_NOT_FOUND:
                             msg.content = S_UNK;
                             msg.fd = m.fd;
-                            send(fd, serialize(msg), strlen(S_UNK) + (sizeof(int) * 2), 0);
+                            msg.from_peer = 0;
+                            send(fd, serialize(msg), strlen(S_UNK) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
                             break;
                         case END:
                             break;
@@ -197,7 +204,7 @@ int command_handler(int fd, int from_peer) {
                 }
             } else {
 
-                /* cluster mode is not enabled, process normally */
+                /* message came directly from a client */
                 char *command = NULL, *b = strdup(buf); // payload to send
                 command = strtok(buf, " \r\n");
                 LOG("Command : %s\n", command);
@@ -218,7 +225,7 @@ int command_handler(int fd, int from_peer) {
                     if (idx >= n->range_min && idx <= n->range_max) {
                         /* check if the range is in the current node */
                         if (n->self == 1) {
-                            switch (process_command(b, fd, fd)) {
+                            switch (process_command(b, fd, fd, 0)) {
                                 case MAP_OK:
                                     send(fd, S_OK, sizeof(S_OK), 0);
                                     break;
@@ -237,7 +244,8 @@ int command_handler(int fd, int from_peer) {
                         } else {
                             msg.content = b;
                             msg.fd = fd;
-                            send(n->fd, serialize(msg), strlen(b) + (sizeof(int) * 2), 0);
+                            msg.from_peer = 0;
+                            send(n->fd, serialize(msg), strlen(b) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
                             LOG("Found on cluster member %s\n", n->name);
                             break;
                         }
@@ -257,7 +265,7 @@ int command_handler(int fd, int from_peer) {
  * hashmap, keys are instance.cluster_mode through consistent hashing
  * calculated with crc32 % PARTITION_NUMBER
  */
-int process_command(char *buffer, int sock_fd, int resp_fd) {
+int process_command(char *buffer, int sock_fd, int resp_fd, unsigned int from_peer) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
     // in case of empty command return nothing, next additions will be awaiting
@@ -277,13 +285,13 @@ int process_command(char *buffer, int sock_fd, int resp_fd) {
     // check if the buffer contains a query and execute it
     for (int i = 0; i < queries_array_len(); i++) {
         if (strncasecmp(command, queries[i], strlen(command)) == 0) {
-            return (*qrs_func[i])(buffer + strlen(command) + 1, sock_fd, resp_fd);
+            return (*qrs_func[i])(buffer + strlen(command) + 1, sock_fd, resp_fd, from_peer);
         }
     }
     // check if the buffer contains an enumeration command and execute it
     for (int i = 0; i < enumerates_array_len(); i++) {
         if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
-            return (*enum_func[i])(sock_fd, resp_fd);
+            return (*enum_func[i])(sock_fd, resp_fd, from_peer);
         }
     }
     // check if the buffer contains a service command and execute it
@@ -310,13 +318,13 @@ int (*cmds_func[]) (char *) = {
     &prepend_command,
 };
 
-int (*qrs_func[]) (char *, int, int) = {
+int (*qrs_func[]) (char *, int, int, unsigned int) = {
     &get_command,
     &getp_command,
     &ttl_command
 };
 
-int (*enum_func[]) (int, int) = {
+int (*enum_func[]) (int, int, unsigned int) = {
     &count_command,
     &keys_command,
     &values_command
@@ -395,7 +403,7 @@ int set_command(char *command) {
  *
  *     GET <key>
  */
-int get_command(char *command, int sock_fd, int resp_fd) {
+int get_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer) {
     int ret = 0;
     void *arg_1 = NULL;
     void *arg_2 = NULL;
@@ -404,16 +412,17 @@ int get_command(char *command, int sock_fd, int resp_fd) {
         trim(arg_1);
         arg_2 = map_get(instance.store, arg_1);
         if (arg_2) {
-            if (instance.cluster_mode == 1) {
+            if (instance.cluster_mode == 1 && from_peer == 1) {
                 struct message m;
-                char response[strlen((char *) arg_2) + 2];
-                sprintf(response, "%s%s", "* ", (char *)arg_2);
-                m.content = response;
+                /* char response[strlen((char *) arg_2) + 2]; */
+                /* sprintf(response, "%s%s", "* ", (char *) arg_2); */
+                /* m.content = response; */
+                m.content = arg_2;
                 m.fd = resp_fd;
-                send(sock_fd, serialize(m), strlen(response) + (sizeof(int) * 2), 0);
+                m.from_peer = 1;
+                send(sock_fd, serialize(m), strlen(arg_2) + (sizeof(int) * 2) + sizeof(unsigned int), 0);
             }
-            else
-                send(sock_fd, arg_2, strlen((char *) arg_2), 0);
+            else send(sock_fd, arg_2, strlen((char *) arg_2), 0);
             ret = 1;
         } else ret = MAP_ERR;
     } else ret = MAP_ERR;
@@ -430,7 +439,7 @@ int get_command(char *command, int sock_fd, int resp_fd) {
  *
  *     GETP <key>
  */
-int getp_command(char *command, int sock_fd, int resp_fd) {
+int getp_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer) {
     int ret = 0;
     void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
@@ -441,13 +450,15 @@ int getp_command(char *command, int sock_fd, int resp_fd) {
             char *kvstring = (char *) malloc(strlen(kv->key) + strlen((char *) kv->val) + (sizeof(long) * 2) + 40);
             sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %ld\n",
                     (char *) kv->key, (char *) kv->val, kv->creation_time, kv->expire_time);
-            if (instance.cluster_mode == 1) {
+            if (instance.cluster_mode == 1 && from_peer == 1) {
                 struct message m;
-                char response[strlen(kvstring) + 2];
-                sprintf(response, "%s%s", "* ", kvstring);
+                /* char response[strlen(kvstring) + 2]; */
+                /* sprintf(response, "%s%s", "* ", kvstring); */
+                /* m.content = kvstring; */
                 m.content = kvstring;
                 m.fd = resp_fd;
-                send(sock_fd, serialize(m), strlen(response) + (sizeof(int) * 2), 0);
+                m.from_peer = 1;
+                send(sock_fd, serialize(m), strlen(kvstring) + (sizeof(int) * 2), 0);
             } else
                 send(sock_fd, kvstring, strlen(kvstring), 0);
             free(kvstring);
@@ -620,7 +631,7 @@ int decf_command(char *command) {
  *
  * Doesn't require any argument.
  */
-int count_command(int sock_fd, int resp_fd) {
+int count_command(int sock_fd, int resp_fd, unsigned int from_peer) {
     int len = 0;
     len += instance.store->size;
     char c_len[24];
@@ -635,7 +646,7 @@ int count_command(int sock_fd, int resp_fd) {
  *
  * Doesn't require any argument.
  */
-int keys_command(int sock_fd, int resp_fd) {
+int keys_command(int sock_fd, int resp_fd, unsigned int from_peer) {
     if (instance.store->size > 0)
         map_iterate(instance.store, print_keys, &sock_fd);
     return 1;
@@ -647,7 +658,7 @@ int keys_command(int sock_fd, int resp_fd) {
  *
  * Doesn't require any argument.
  */
-int values_command(int sock_fd, int resp_fd) {
+int values_command(int sock_fd, int resp_fd, unsigned int from_peer) {
     if (instance.store->size > 0)
         map_iterate(instance.store, print_values, &sock_fd);
     return 1;
@@ -725,7 +736,7 @@ int prepend_command(char *command) {
  *
  *     TTL <key>
  */
-int ttl_command(char *command, int sock_fd, int resp_fd) {
+int ttl_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer) {
     void *arg_1 = NULL;
     arg_1 = strtok(command, " ");
     if (arg_1) {

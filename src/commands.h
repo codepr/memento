@@ -43,7 +43,7 @@ typedef enum { OK, PAYLOAD_OK, ITERATE_OK,
 
 int check_command(char *);
 int command_handler(int, int);
-int process_command(char *, int, int);
+int process_command(char *, int, int, unsigned int);
 
 extern const char *commands[];
 extern const char *queries[];
@@ -65,19 +65,19 @@ int decf_command(char *);
 int append_command(char *);
 int prepend_command(char *);
 // Queries
-int get_command(char *, int, int);
-int getp_command(char *, int, int);
-int ttl_command(char *, int, int);
+int get_command(char *, int, int, unsigned int);
+int getp_command(char *, int, int, unsigned int);
+int ttl_command(char *, int, int, unsigned int);
 // enumerates
-int count_command(int, int);
-int keys_command(int, int);
-int values_command(int, int);
+int count_command(int, int, unsigned int);
+int keys_command(int, int, unsigned int);
+int values_command(int, int, unsigned int);
 // services
 int flush_command(void);
 
 extern int (*cmds_func[]) (char *);
-extern int (*qrs_func[]) (char *, int, int);
-extern int (*enum_func[]) (int, int);
+extern int (*qrs_func[]) (char *, int, int, unsigned int);
+extern int (*enum_func[]) (int, int, unsigned int);
 extern int (*srvs_func[]) (void);
 
 #endif
