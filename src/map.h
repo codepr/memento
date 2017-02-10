@@ -22,7 +22,6 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include "queue.h"
 
 #define MAP_OK 0
 #define MAP_ERR -1

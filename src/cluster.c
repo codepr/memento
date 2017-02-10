@@ -19,6 +19,7 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include "util.h"
 #include "list.h"
@@ -61,19 +62,6 @@ int cluster_init(int distributed, const char *id, const char *host, const char *
         self.port = GETINT(port);
         self.name = id;
 
-        /* insert self node */
-        /* cluster_node *self_node = */
-        /*     (cluster_node *) malloc(sizeof(cluster_node)); */
-        /* self_node->name = id; */
-        /* self_node->self = 1; */
-        /* self_node->addr = host; */
-        /* self_node->port = GETINT(port); */
-        /* self_node->state = REACHABLE; */
-        /* if (cluster_contained(self_node) == 1) free(self_node); */
-        /* else { */
-        /*     instance.cluster = */
-        /*         list_head_insert(instance.cluster, self_node); */
-        /* } */
         /* lock for incoming connection, till the cluster is formed and ready */
         instance.lock = 1;
     } else instance.lock = 0;
@@ -225,7 +213,7 @@ cluster_node *cluster_get_node(const char *host, const char *port) {
 int cluster_join(const char *host, const char *port) {
     int fd;
     if ((fd = connectto(host, port)) == -1) {
-        fprintf(stderr, "[!] Impossible connection to %s:%s\n", host, port);
+        LOG(ERR, "Impossible connection to %s:%s\n", host, port);
         return -1;
     }
     /* If cluster node is present set the file descriptor */

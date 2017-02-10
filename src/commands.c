@@ -20,6 +20,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -787,7 +788,6 @@ int expire_command(char *command) {
             entry->expire_time = (long) intval;
             entry->creation_time = current_timestamp();
             ret = MAP_OK;
-            printf("INTVAL: %d\n", intval);
         }
     }
     return ret;

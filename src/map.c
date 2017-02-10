@@ -267,7 +267,6 @@ static int destroy(void *t1, void *t2) {
         // free value field
         if (kv->val)
             free(kv->val);
-        // data history queue
     } else return MAP_ERR;
 
     return MAP_OK;

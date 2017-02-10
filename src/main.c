@@ -20,6 +20,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <getopt.h>
 #include <unistd.h>
@@ -50,8 +51,6 @@ static void *form_cluster_thread(void *p) {
                 char p[5];
                 sprintf(p, "%d", n->port);
                 if (cluster_join(n->addr, p) == 1) len--;
-            } else {
-                if (n->self == 0) len--;
             }
             cursor = cursor->next;
         }
@@ -74,6 +73,7 @@ static void *form_cluster_thread(void *p) {
                 n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
         cursor = cursor->next;
     }
+    LOG(INFO, "Cluster succesfully formed\n");
     return NULL;
 }
 

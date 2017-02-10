@@ -35,7 +35,7 @@
 
 
 /* Log level */
-typedef enum { DEBUG, ERR, INFO } loglevel;
+typedef enum { INFO, ERR, DEBUG } loglevel;
 
 void *shb_malloc(size_t);
 unsigned long crc32(const unsigned char *, unsigned int);

@@ -261,20 +261,20 @@ const char *get_homedir(void) {
 
 void s_log(loglevel level, const char *info, ...) {
     /* Print log only if level is the same of the instance loglevel */
-    if (level == instance.log_level) {
+    if (level <= instance.log_level) {
         va_list argptr;
         va_start(argptr, info);
         char time_buff[100];
-        char prefix[5];
+        char prefix[10];
         switch(level) {
             case DEBUG:
                 sprintf(prefix, "[DBG]");
                 break;
             case ERR:
-                sprintf(prefix, "[INF]");
+                sprintf(prefix, "\033[1m[ERR]");
                 break;
             case INFO:
-                sprintf(prefix, "[ERR]");
+                sprintf(prefix, "[INF]");
                 break;
             default:
                 sprintf(prefix, "[INF]");
@@ -287,6 +287,7 @@ void s_log(loglevel level, const char *info, ...) {
         strcat(content, prefix);
         strcat(content, time_buff);
         strcat(content, info);
+        strcat(content, "\033[0m");
         vfprintf(stdout, content, argptr);
         va_end(argptr);
     }

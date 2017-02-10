@@ -1,8 +1,8 @@
 CC=gcc
 CFLAGS=-std=gnu99 -Wall -lrt -lpthread
+RELEASE=./release
 SRC=src/main.c 			\
 	src/map.c 			\
-	src/queue.c 		\
 	src/util.c 			\
 	src/commands.c 		\
 	src/persistence.c 	\
@@ -13,10 +13,13 @@ SRC=src/main.c 			\
 	src/list.c
 
 shibui: $(SRC)
-	$(CC) $(CFLAGS) $(SRC) -o shibui
+	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) -o $(RELEASE)/shibui
 
 shibui-cli: src/shibui-cli.c
-	$(CC) $(CFLAGS) src/shibui-cli.c -o shibui-cli
+	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) src/shibui-cli.c -o $(RELEASE)/shibui-cli
+
+test:
+	cd tests && $(MAKE) test
 
 clean:
-	rm -f shibui
+	rm -f $(RELEASE)/shibui

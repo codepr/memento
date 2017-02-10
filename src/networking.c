@@ -151,7 +151,7 @@ int connectto(const char *host, const char *port) {
     if (connect(sfd, (const struct sockaddr *) &serveraddr,
                 sizeof(serveraddr)) < 0) {
 
-        perror("ERROR connecting");
+        LOG(ERR, "Connection error: %s\n", strerror(errno));
         return -1;
     }
 
