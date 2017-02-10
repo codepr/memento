@@ -26,7 +26,7 @@
 #include "cluster.h"
 
 /* global state store instance */
-shibui instance;
+memento instance;
 
 /* self reference in a cluster context */
 cluster_node self;
@@ -83,7 +83,7 @@ void cluster_destroy(void) {
 
 
 /*
- * Add a cluster node to the global state shibui
+ * Add a cluster node to the global state memento
  */
 void cluster_add_node(cluster_node *node) {
     instance.cluster = list_head_insert(instance.cluster, node);

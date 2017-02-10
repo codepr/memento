@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-std=gnu99 -Wall -lrt -lpthread
 RELEASE=./release
-SRC=src/main.c 			\
+SRC=src/memento.c		\
 	src/map.c 			\
 	src/util.c 			\
 	src/commands.c 		\
@@ -12,14 +12,14 @@ SRC=src/main.c 			\
 	src/cluster.c 		\
 	src/list.c
 
-shibui: $(SRC)
-	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) -o $(RELEASE)/shibui
+memento: $(SRC)
+	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) -o $(RELEASE)/memento
 
-shibui-cli: src/shibui-cli.c
-	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) src/shibui-cli.c -o $(RELEASE)/shibui-cli
+memento-cli: src/memento-cli.c
+	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) src/memento-cli.c -o $(RELEASE)/memento-cli
 
 test:
 	cd tests && $(MAKE) test
 
 clean:
-	rm -f $(RELEASE)/shibui
+	rm -f $(RELEASE)/memento

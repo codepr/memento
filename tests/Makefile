@@ -12,8 +12,8 @@ SRC=../src/map.c 		\
 	../src/list.c
 
 
-shibui: $(SRC)
-	$(CC) $(CFLAGS) $(SRC) -o shibui
+memento: $(SRC)
+	$(CC) $(CFLAGS) $(SRC) -o memento
 
 test: map_test.c
 	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) -o $(RELEASE)/map_test map_test.c && $(RELEASE)/map_test

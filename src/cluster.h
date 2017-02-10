@@ -57,10 +57,10 @@ typedef struct {
     list *cluster;                      // map of cluster nodes
     list *ingoing;                      // map of the ingoing connection as backup
     loglevel log_level;                 // log level of the entire system
-} shibui;
+} memento;
 
 
-extern shibui instance;
+extern memento instance;
 
 extern cluster_node self;
 
