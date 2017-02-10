@@ -1,6 +1,13 @@
 * CHANGELOG
 =========================================
 
+2017-02-10
+
+- Almost complete refactoring of the code
+- Better organization, removed some useless commands
+- Rethink of the distribution part of the system
+- Rename of the project
+
 2017-01-19
 
 - Rough support to distribution across a cluster of machines
