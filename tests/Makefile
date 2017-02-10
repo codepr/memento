@@ -15,5 +15,5 @@ SRC=../src/map.c 		\
 memento: $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o memento
 
-test: map_test.c
-	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) -o $(RELEASE)/map_test map_test.c && $(RELEASE)/map_test
+test: dt_test.c
+	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) -o $(RELEASE)/dt_test dt_test.c && $(RELEASE)/dt_test

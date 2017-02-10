@@ -1,5 +1,5 @@
 
-SHIBUI
+MEMENTO
 =========================================
 
 Fairly simple hashmap implementation built on top of an epoll TCP server. A toy
@@ -68,23 +68,23 @@ containing each the right configuration.
 * BUILD
 =========================================
 
-To build the source just run make. A shibui executable will be generated that
+To build the source just run make. A memento executable will be generated that
 can be started to listen on a defined hostname, ready to receive commands from any
 TCP client
 
-    $ ./shibui -a <hostname> -p <port>
+    $ ./memento -a <hostname> -p <port>
 
 -m define master node in a distributed context
 
-    $ ./shibui -a <hostname> -p <port> -c
+    $ ./memento -a <hostname> -p <port> -c
 
-Parameter <hostname> and <port> fallback to 127.0.0.1 and 6737, shibui accept also
+Parameter <hostname> and <port> fallback to 127.0.0.1 and 6737, memento accept also
 a -f parameter, it allows to specify a configuration file for cluster context.
 
-    $ ./shibui -a <master-hostname> -p <port> -c -f ./conf/node0.conf
+    $ ./memento -a <master-hostname> -p <port> -c -f ./conf/node0.conf
 
-To build shibui-cli just make shibui-cli and run it like the following:
+To build memento-cli just make memento-cli and run it like the following:
 
-    $ ./shibui-cli <hostname> <port>
+    $ ./memento-cli <hostname> <port>
 
 
