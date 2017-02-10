@@ -95,9 +95,7 @@ void command_loop(int fd, char *hostname, char *port) {
                     printf("%s", buf);
                 }
             } else if (strncasecmp(comm, "KEYS", 4) == 0 ||
-                       strncasecmp(comm, "VALUES", 6) == 0 ||
-                       strncasecmp(comm, "PREFSCAN", 8) == 0 ||
-                       strncasecmp(comm, "FUZZYSCAN", 9) == 0) {
+                       strncasecmp(comm, "VALUES", 6) == 0) {
                 fcntl(fd, F_SETFL, O_NONBLOCK);
                 status = write(fd, line, strlen(line));
                 usleep(100000);
@@ -179,27 +177,13 @@ void help(void) {
     printf("                            by <key>, if no <qty> is specified increment by 1.0\n");
     printf("DECF                        key qty Decrement by <qty> the value identified by <key>,\n");
     printf("                            if no <qty> is specified decrement by 1.0\n");
-    printf("SUB key key2 .. keyN        Subscribe to <key>..<keyN>, receiving messages published\n");
-    printf("UNSUB key key2 .. keyN      Unsubscribe from <key>..<keyN>\n");
-    printf("PUB key value               Publish message <value> to <key> (analog to set\n");
-    printf("                            but broadcasting to all subscribed members of key)\n");
     printf("GETP key                    Get all information of a key-value pair represented by\n");
     printf("                            <key>, like key, value, creation time and expire time\n");
     printf("APPEND key value            Append <value> to <key>\n");
     printf("PREPEND key value           Prepend <value> to <key>\n");
-    printf("EXPIRE key ms               Set an expire time in milliseconds after that the <key>\n");
-    printf("                            will be deleted, upon taking -1 as <ms> value the\n");
-    printf("                            expire time will be removed\n");
     printf("KEYS                        List all keys stored into the keyspace\n");
     printf("VALUES                      List all values stored into the keyspace\n");
     printf("COUNT                       Return the number of key-value pair stored\n");
-    printf("TAIL key offset             Like SUB, but with an <offset> representing how\n");
-    printf("                            many messages discard starting from 0 (the very\n");
-    printf("                            first chronologically)\n");
-    printf("PREFSCAN key_prefix         Scan the keyspace finding all values associated to\n");
-    printf("                            keys matching <key_prefix> as prefix\n");
-    printf("FUZZYSCAN pattern           Scan the keyspace finding all values associated to\n");
-    printf("                            keys matching <pattern> in a fuzzy search way\n");
     printf("FLUSH                       Delete all maps stored inside partitions\n");
     printf("QUIT/EXIT                   Close connection\n");
     printf("\n");

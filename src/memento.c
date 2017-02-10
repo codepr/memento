@@ -32,6 +32,10 @@
 #include "networking.h"
 
 
+/*
+ * The only thread used in the system, just for connect all nodes defined
+ * in the configuration file
+ */
 static void *form_cluster_thread(void *p) {
 
     int len = 0;
@@ -113,6 +117,11 @@ int main(int argc, char **argv) {
                 cluster_mode = 0;
                 break;
         }
+    }
+
+    if (GETINT(port) > 65435) {
+        fprintf(stderr, "Port must be at lesser than or equal to 65435\n");
+        exit(EXIT_FAILURE);
     }
 
     char bus_port[20];

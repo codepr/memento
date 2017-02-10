@@ -49,7 +49,9 @@ The configuration file shall strictly follow some rules, a sample could be:
 ```
 
 every line define a node, with an IP address, a port, his id-name and a flag to
-define if the `IP-PORT-ID` refers to self node (ie the machine where the file reside).
+define if the `IP-PORT-ID` refers to self node (ie the machine where the file
+reside). `PORT` value refer to the actual listen port of the instance plus 100.
+So 8082 means a bus port 8182.
 
 It is possible to generate basic configurations using the helper script
 `build_cluster.py`, it accepts just the address and port of every node, so to
@@ -63,6 +65,11 @@ This instruction will generate files `node0.conf`, `node1.conf` and
 `node2.conf` containing each the right configuration. It can be renamed to
 `.memento` and dropped in the `$HOME` path of every node, or can be passed to
 the program as argument using `-f` option.
+
+The distribution of keys and values follows a classic hashing addressing in a
+keyspace divided in equal buckets through the cluster. The total number of
+slots is 8192, so if the cluster is formed of 2 nodes, every node will get
+at most 4096 keys.
 
 ### Build
 
