@@ -44,7 +44,9 @@ not strictly uppercase.
 Still in development and surely bugged, it currently supports some commands in
 a distributed context. There aren't a replica system yet, planning to add it
 soon, currently the database can be started in cluster mode with the -c flag
-and by creating a configuration file on each node.
+and by creating a configuration file on each node. As default behaviour, memento
+search for a ~/.memento file in $HOME, by the way it is also possible to
+define a different path.
 
 The configuration file shall strictly follow some rules, a sample could be:
 
@@ -68,23 +70,23 @@ containing each the right configuration.
 * BUILD
 =========================================
 
-To build the source just run make. A memento executable will be generated that
-can be started to listen on a defined hostname, ready to receive commands from any
-TCP client
+To build the source just run make. A memento executable will be generated into
+a "release" directory that can be started to listen on a defined hostname,
+ready to receive commands from any TCP client
 
-    $ ./memento -a <hostname> -p <port>
+    $ ./release/memento -a <hostname> -p <port>
 
 -m define master node in a distributed context
 
-    $ ./memento -a <hostname> -p <port> -c
+    $ ./release/memento -a <hostname> -p <port> -c
 
 Parameter <hostname> and <port> fallback to 127.0.0.1 and 6737, memento accept also
 a -f parameter, it allows to specify a configuration file for cluster context.
 
-    $ ./memento -a <master-hostname> -p <port> -c -f ./conf/node0.conf
+    $ ./release/memento -a <master-hostname> -p <port> -c -f ./conf/node0.conf
 
 To build memento-cli just make memento-cli and run it like the following:
 
-    $ ./memento-cli <hostname> <port>
+    $ ./release/memento-cli <hostname> <port>
 
 
