@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=gnu99 -Wall -lrt -lpthread
+CFLAGS=-std=gnu99 -Wall -lrt -lpthread -O3 -pedantic
 RELEASE=./release
 SRC=src/memento.c		\
 	src/map.c 			\

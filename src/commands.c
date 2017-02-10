@@ -437,7 +437,7 @@ int set_command(char *command) {
     int ret = 0;
     void *key = strtok(command, " ");
     if (key) {
-        void *val = key + strlen(key) + 1;
+        void *val = (char *) key + strlen(key) + 1;
         if (val) ret = map_put(instance.store, strdup(key), strdup(val));
     }
     return ret;
@@ -729,7 +729,7 @@ int values_command(int sfd, int rfd, unsigned int from_peer) {
 int append_command(char *command) {
     int ret = MAP_ERR;
     void *key = strtok(command, " ");
-    void *val = key + strlen(key) + 1;
+    void *val = (char *) key + strlen(key) + 1;
     if (key && val) {
         char *key_holder = strdup(key);
         char *val_holder = strdup(val);
@@ -755,7 +755,7 @@ int append_command(char *command) {
 int prepend_command(char *command) {
     int ret = MAP_ERR;
     void *key = strtok(command, " ");
-    void *val = key + strlen(key) + 1;
+    void *val = (char *) key + strlen(key) + 1;
     if (key && val) {
         char *key_holder = strdup(key);
         char *val_holder = strdup(val);
@@ -781,7 +781,7 @@ int expire_command(char *command) {
         trim(key);
         map_entry *entry = (map_entry *) malloc(sizeof(map_entry));
         entry = map_get_entry(instance.store, key);
-        void *val = key + strlen(key) + 1;
+        void *val = (char *) key + strlen(key) + 1;
         if (val) {
             int intval = GETINT(val);
             entry->has_expire_time = 1;

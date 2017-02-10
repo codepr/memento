@@ -34,7 +34,7 @@
 
 static void *form_cluster_thread(void *p) {
 
-    int len;
+    int len = 0;
     sleep(2);
 
     while (instance.lock == 1) {
