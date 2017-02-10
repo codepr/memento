@@ -30,14 +30,14 @@ not strictly uppercase.
 | **QUIT/EXIT** |                            | Close connection                                                                                              |
 
 
-## Distribution
+### Distribution
 
-Still in development and surely bugged, it currently supports some commands in
-a distributed context in a cluster of machines. There aren't a replica system
-yet, planning to add it soon, currently the database can be started in cluster
-mode with the -c flag and by creating a configuration file on each node. As
-default behaviour, memento search for a ~/.memento file in $HOME, by the way it
-is also possible to define a different path.
+Still in development and certainly bugged, it currently supports some commands
+in a distributed context across a cluster of machines. There isn't a replica
+system yet, planning to add it soon, currently the database can be started in
+cluster mode with the -c flag and by creating a configuration file on each
+node. As default behaviour, memento search for a ~/.memento file in $HOME, by
+the way it is also possible to define a different path.
 
 The configuration file shall strictly follow some rules, a sample could be:
 
@@ -52,15 +52,19 @@ every line define a node, with an IP address, a port, his id-name and a flag to
 define if the `IP-PORT-ID` refers to self node (ie the machine where the file reside).
 
 It is possible to generate basic configurations using the helper script
-build_cluster.py, it accepts just the address and port of every node, so
-to create 3 configuration file as the previous example just run:
+`build_cluster.py`, it accepts just the address and port of every node, so to
+create 3 configuration file as the previous example just run (all on the same
+machine, but can be easily used to generate configurations for different nodes
+in a LAN):
 
     $ python build_cluster.py 127.0.0.1 8081 127.0.0.1 8082 127.0.0.1 8083
 
-This instruction will generate files `node0.conf`, `node1.conf` and `node2.conf`
-containing each the right configuration.
+This instruction will generate files `node0.conf`, `node1.conf` and
+`node2.conf` containing each the right configuration. It can be renamed to
+`.memento` and dropped in the `$HOME` path of every node, or can be passed to
+the program as argument using `-f` option.
 
-## Build
+### Build
 
 To build the source just run `make`. A `memento` executable will be generated into
 a `release` directory that can be started to listen on a defined `hostname`,
@@ -75,10 +79,20 @@ ready to receive commands from any TCP client
 Parameter `<hostname>` and `<port>` fallback to 127.0.0.1 and 6737, memento accept also
 a -f parameter, it allows to specify a configuration file for cluster context.
 
-    $ ./release/memento -a <master-hostname> -p <port> -c -f ./conf/node0.conf
+    $ ./release/memento -a <hostname> -p <port> -c -f ./conf/node0.conf
+
+The name of the node can be overridden with the `-i` option
+
+    $ ./release/memento -a <hostname> -p <port> -c -f <path-to-conf> -i <name-id>
 
 To build memento-cli just `make memento-cli` and run it like the following:
 
     $ ./release/memento-cli <hostname> <port>
 
+### Changelog
 
+See the [CHANGELOG](CHANGELOG) file.
+
+### License
+
+See the [LICENSE](LICENSE) file for license rights and limitations (MIT).
