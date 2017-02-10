@@ -36,7 +36,7 @@
  * perform side-effects on the keyspace
  */
 const char *commands[]   = { "set", "del", "inc", "incf", "dec", "decf",
-    "append", "prepend" };
+    "append", "prepend", "expire" };
 /*
  * Array of query-commands, they do not perform side-effects directly on the
  * keyspace (except for sub/unsub, that add/remove file-descriptor as subscriber
@@ -133,6 +133,7 @@ static int hash(char *key) {
                 strlen(holder), seed) % PARTITIONS;
 
         LOG(DEBUG, "Destination node: %d for key %s\r\n", idx, holder);
+        free(holder);
         return idx;
     } else return -1;
 }
@@ -306,11 +307,11 @@ int command_handler(int fd, int from_peer) {
 
 /*
  * process incoming request from the file descriptor socket represented by
- * sock_fd, map is an array of partition, every partition store an instance of
+ * sfd, map is an array of partition, every partition store an instance of
  * hashmap, keys are instance.cluster_mode through consistent hashing
  * calculated with crc32 % PARTITION_NUMBER
  */
-int process_command(char *buffer, int sock_fd, int resp_fd, unsigned int from_peer) {
+int process_command(char *buffer, int sfd, int rfd, unsigned int from_peer) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
     /*
@@ -334,13 +335,13 @@ int process_command(char *buffer, int sock_fd, int resp_fd, unsigned int from_pe
     for (int i = 0; i < queries_array_len(); i++) {
         if (strncasecmp(command, queries[i], strlen(command)) == 0) {
             return (*qrs_func[i])(buffer + strlen(command) + 1,
-                    sock_fd, resp_fd, from_peer);
+                    sfd, rfd, from_peer);
         }
     }
     // check if the buffer contains an enumeration command and execute it
     for (int i = 0; i < enumerates_array_len(); i++) {
         if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
-            return (*enum_func[i])(sock_fd, resp_fd, from_peer);
+            return (*enum_func[i])(sfd, rfd, from_peer);
         }
     }
     // check if the buffer contains a service command and execute it
@@ -365,6 +366,7 @@ int (*cmds_func[]) (char *) = {
     &decf_command,
     &append_command,
     &prepend_command,
+    &expire_command
 };
 
 int (*qrs_func[]) (char *, int, int, unsigned int) = {
@@ -407,6 +409,8 @@ static int print_keys(void * t1, void * t2) {
     strcpy(stringkey, kv->key);
     char *key_nl = append_string(stringkey, "\n");
     send(*fd, key_nl, strlen(key_nl), 0);
+    free(key_nl);
+    free(stringkey);
     return MAP_OK;
 }
 
@@ -430,17 +434,10 @@ static int print_values(void * t1, void * t2) {
  */
 int set_command(char *command) {
     int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1)
-        arg_2 = arg_1 + strlen(arg_1) + 1;
-    if (arg_2) {
-        void *arg_1_holder = malloc(strlen(arg_1));
-        void *arg_2_holder = malloc(strlen((char *) arg_2));
-        strcpy(arg_1_holder, arg_1);
-        strcpy(arg_2_holder, arg_2);
-        ret = map_put(instance.store, arg_1_holder, arg_2_holder);
+    void *key = strtok(command, " ");
+    if (key) {
+        void *val = key + strlen(key) + 1;
+        if (val) ret = map_put(instance.store, strdup(key), strdup(val));
     }
     return ret;
 }
@@ -455,32 +452,28 @@ int set_command(char *command) {
  *
  *     GET <key>
  */
-int get_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        arg_2 = map_get(instance.store, arg_1);
-        if (arg_2) {
+int get_command(char *command, int sfd, int rfd, unsigned int from_peer) {
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
+        void *val = map_get(instance.store, key);
+        if (val) {
             if (instance.cluster_mode == 1 && from_peer == 1) {
                 struct message m;
                 /* adding some informations about the node host */
-                char response[strlen((char *) arg_2) + strlen(self.addr) + strlen(self.name) + 9];
-                sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, (char *) arg_2);
+                char response[strlen((char *) val) + strlen(self.addr) + strlen(self.name) + 9];
+                sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, (char *) val);
                 m.content = response;
-
-                m.fd = resp_fd;
+                m.fd = rfd;
                 m.from_peer = 1;
                 char *payload = serialize(m);
-                send(sock_fd, payload, strlen(response) + S_OFFSET, 0);
+                send(sfd, payload, strlen(response) + S_OFFSET, 0);
                 free(payload);
-            }
-            else send(sock_fd, arg_2, strlen((char *) arg_2), 0);
+            } else send(sfd, val, strlen((char *) val), 0);
             ret = 1;
-        } else ret = MAP_ERR;
-    } else ret = MAP_ERR;
+        }
+    }
     return ret;
 }
 
@@ -495,35 +488,40 @@ int get_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer)
  *
  *     GETP <key>
  */
-int getp_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        map_entry *kv = map_get_entry(instance.store, arg_1);
+int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
+        map_entry *kv = map_get_entry(instance.store, key);
         if (kv) {
             char *kvstring = (char *) malloc(strlen(kv->key)
-                    + strlen((char *) kv->val) + (sizeof(long) * 2) + 40);
-            sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %ld\n",
-                    (char *) kv->key, (char *) kv->val, kv->creation_time, kv->expire_time);
+                    + strlen((char *) kv->val) + (sizeof(long) * 2) + 128); // long numbers
+            /* check if expire time is set */
+            char expire_time[7];
+            if (kv->has_expire_time)
+                sprintf(expire_time, "%ld\n", kv->expire_time / 1000);
+            else
+                sprintf(expire_time, "%d\n", -1);
+
+            sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %s\n",
+                    (char *) kv->key, (char *) kv->val, kv->creation_time, expire_time);
             if (instance.cluster_mode == 1 && from_peer == 1) {
                 struct message m;
                 /* adding some informations about the node host */
-                char response[strlen(kvstring) + strlen(self.addr) + strlen(self.name) + 15];
-                sprintf(response, "Node: %s:%s:%d\n%s", self.name, self.addr, self.port, kvstring);
+                char response[strlen(kvstring) + strlen(self.addr) + strlen(self.name) + 18];
+                sprintf(response, "Node: %s:%s:%d\n%s\n", self.name, self.addr, self.port, kvstring);
                 m.content = response;
-                m.fd = resp_fd;
+                m.fd = rfd;
                 m.from_peer = 1;
                 char *payload = serialize(m);
-                send(sock_fd, payload, strlen(response) + (sizeof(int) * 2), 0);
+                send(sfd, payload, strlen(response) + (sizeof(int) * 2), 0);
                 free(payload);
-            } else
-                send(sock_fd, kvstring, strlen(kvstring), 0);
+            } else send(sfd, kvstring, strlen(kvstring), 0);
             free(kvstring);
             ret = 1;
-        } else ret = MAP_ERR;
-    } else ret = MAP_ERR;
+        }
+    }
     return ret;
 }
 
@@ -538,12 +536,11 @@ int getp_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer
  */
 int del_command(char *command) {
     int ret = 0;
-    void *arg_1 = NULL;
-    arg_1 = strtok(command, " ");
-    while (arg_1 != NULL) {
-        trim(arg_1);
-        ret = map_del(instance.store, arg_1);
-        arg_1 = strtok(NULL, " ");
+    void *key = strtok(command, " ");
+    while (key) {
+        trim(key);
+        ret = map_del(instance.store, key);
+        key = strtok(NULL, " ");
     }
     return ret;
 }
@@ -560,25 +557,24 @@ int del_command(char *command) {
  *     INC <key> 5 // +5 to <key>
  */
 int inc_command(char *command) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        arg_2 = map_get(instance.store, arg_1);
-        if (arg_2) {
-            char *s = (char *) arg_2;
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
+        void *val = map_get(instance.store, key);
+        if (val) {
+            char *s = (char *) val;
             if (ISINT(s) == 1) {
                 int v = GETINT(s);
                 char *by = strtok(NULL, " ");
                 if (by && ISINT(by)) {
                     v += GETINT(by);
                 } else v++;
-                sprintf(arg_2, "%d\n", v);
-            } else ret = MAP_ERR;
+                sprintf(val, "%d\n", v);
+                ret = 0;
+            }
         }
-    } else ret = MAP_ERR;
+    }
     return ret;
 }
 
@@ -594,25 +590,24 @@ int inc_command(char *command) {
  *     INCF <key> 5.0 // +5.0 to <key>
  */
 int incf_command(char *command) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        arg_2 = map_get(instance.store, arg_1);
-        if (arg_2) {
-            char *s = (char *) arg_2;
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
+        void *val = map_get(instance.store, key);
+        if (val) {
+            char *s = (char *) val;
             if (is_float(s) == 1) {
                 double v = GETDOUBLE(s);
                 char *by = strtok(NULL, " ");
                 if (by && is_float(by)) {
                     v += GETDOUBLE(by);
                 } else v += 1.0;
-                sprintf(arg_2, "%lf\n", v);
-            } else ret = MAP_ERR;
+                sprintf(val, "%lf\n", v);
+                ret = 0;
+            }
         }
-    } else ret = MAP_ERR;
+    }
     return ret;
 }
 
@@ -628,25 +623,24 @@ int incf_command(char *command) {
  *     DEC <key> 5 // -5 to <key>
  */
 int dec_command(char *command) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        arg_2 = map_get(instance.store, arg_1);
-        if (arg_2) {
-            char *s = (char *) arg_2;
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
+        void *val = map_get(instance.store, key);
+        if (val) {
+            char *s = (char *) val;
             if(ISINT(s) == 1) {
                 int v = GETINT(s);
                 char *by = strtok(NULL, " ");
                 if (by != NULL && ISINT(by)) {
                     v -= GETINT(by);
                 } else v--;
-                sprintf(arg_2, "%d\n", v);
-            } else ret = MAP_ERR;
+                sprintf(val, "%d\n", v);
+                ret = 0;
+            }
         }
-    } else ret = MAP_ERR;
+    }
     return ret;
 }
 
@@ -662,25 +656,24 @@ int dec_command(char *command) {
  *     DECF <key> 5.0 // -5.0 to <key>
  */
 int decf_command(char *command) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
-        arg_2 = map_get(instance.store, arg_1);
-        if (arg_2) {
-            char *s = (char *) arg_2;
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
+        void *val = map_get(instance.store, key);
+        if (val) {
+            char *s = (char *) val;
             if(is_float(s) == 1) {
                 double v = GETDOUBLE(s);
                 char *by = strtok(NULL, " ");
                 if (by != NULL && ISINT(by)) {
                     v -= GETDOUBLE(by);
                 } else v -= 1.0;
-                sprintf(arg_2, "%lf\n", v);
-            } else ret = MAP_ERR;
+                sprintf(val, "%lf\n", v);
+                ret = 0;
+            }
         }
-    } else ret = MAP_ERR;
+    }
     return ret;
 }
 
@@ -690,12 +683,11 @@ int decf_command(char *command) {
  *
  * Doesn't require any argument.
  */
-int count_command(int sock_fd, int resp_fd, unsigned int from_peer) {
-    int len = 0;
-    len += instance.store->size;
-    char c_len[24];
-    sprintf(c_len, "%d\n", len);
-    send(sock_fd, c_len, 24, 0);
+int count_command(int sfd, int rfd, unsigned int from_peer) {
+    unsigned long len = instance.store->size;
+    char c_len[16];
+    snprintf(c_len, 16, "%lu\n", len);
+    send(sfd, c_len, 16, 0);
     return 1;
 }
 
@@ -705,9 +697,9 @@ int count_command(int sock_fd, int resp_fd, unsigned int from_peer) {
  *
  * Doesn't require any argument.
  */
-int keys_command(int sock_fd, int resp_fd, unsigned int from_peer) {
+int keys_command(int sfd, int rfd, unsigned int from_peer) {
     if (instance.store->size > 0)
-        map_iterate(instance.store, print_keys, &sock_fd);
+        map_iterate(instance.store, print_keys, &sfd);
     return 1;
 }
 
@@ -717,9 +709,9 @@ int keys_command(int sock_fd, int resp_fd, unsigned int from_peer) {
  *
  * Doesn't require any argument.
  */
-int values_command(int sock_fd, int resp_fd, unsigned int from_peer) {
+int values_command(int sfd, int rfd, unsigned int from_peer) {
     if (instance.store->size > 0)
-        map_iterate(instance.store, print_values, &sock_fd);
+        map_iterate(instance.store, print_values, &sfd);
     return 1;
 }
 
@@ -734,24 +726,19 @@ int values_command(int sock_fd, int resp_fd, unsigned int from_peer) {
  *     APPEND <key> <value>
  */
 int append_command(char *command) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    arg_2 = arg_1 + strlen(arg_1) + 1;
-    if (arg_1 && arg_2) {
-        char *arg_1_holder = malloc(strlen(arg_1));
-        char *arg_2_holder = malloc(strlen((char *) arg_2));
-        strcpy(arg_1_holder, arg_1);
-        strcpy(arg_2_holder, arg_2);
-        void *val = NULL;
-        val = map_get(instance.store, arg_1_holder);
-        if (val) {
-            remove_newline(val);
-            char *append = append_string(val, arg_2_holder);
-            ret = map_put(instance.store, arg_1_holder, append);
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    void *val = key + strlen(key) + 1;
+    if (key && val) {
+        char *key_holder = strdup(key);
+        char *val_holder = strdup(val);
+        void *_val = map_get(instance.store, key_holder);
+        if (_val) {
+            remove_newline(_val);
+            char *append = append_string(_val, val_holder);
+            ret = map_put(instance.store, key_holder, append);
         }
-    } else ret = MAP_ERR;
+    }
     return ret;
 }
 
@@ -765,24 +752,44 @@ int append_command(char *command) {
  *     PREPEND <key> <value>
  */
 int prepend_command(char *command) {
-    int ret = 0;
-    void *arg_1 = NULL;
-    void *arg_2 = NULL;
-    arg_1 = strtok(command, " ");
-    arg_2 = arg_1 + strlen(arg_1) + 1;
-    if (arg_1 && arg_2) {
-        char *arg_1_holder = malloc(strlen(arg_1));
-        char *arg_2_holder = malloc(strlen((char *) arg_2));
-        strcpy(arg_1_holder, arg_1);
-        strcpy(arg_2_holder, arg_2);
-        void *val = NULL;
-        val = map_get(instance.store, arg_1_holder);
-        if (val) {
-            remove_newline(arg_2_holder);
-            char *append = append_string(arg_2_holder, val);
-            ret = map_put(instance.store, arg_1_holder, append);
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    void *val = key + strlen(key) + 1;
+    if (key && val) {
+        char *key_holder = strdup(key);
+        char *val_holder = strdup(val);
+        void *_val = map_get(instance.store, key_holder);
+        if (_val) {
+            remove_newline(val_holder);
+            char *append = append_string(val_holder, _val);
+            ret = map_put(instance.store, key_holder, append);
         }
-    } else ret = MAP_ERR;
+    }
+    return ret;
+}
+
+
+/*
+ * EXPIRE command handler, get the entry identified by the key and set a ttl
+ * after wchich the key will be deleted.
+ */
+int expire_command(char *command) {
+    int ret = MAP_ERR;
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
+        map_entry *entry = (map_entry *) malloc(sizeof(map_entry));
+        entry = map_get_entry(instance.store, key);
+        void *val = key + strlen(key) + 1;
+        if (val) {
+            int intval = GETINT(val);
+            entry->has_expire_time = 1;
+            entry->expire_time = (long) intval;
+            entry->creation_time = current_timestamp();
+            ret = MAP_OK;
+            printf("INTVAL: %d\n", intval);
+        }
+    }
     return ret;
 }
 
@@ -795,13 +802,12 @@ int prepend_command(char *command) {
  *
  *     TTL <key>
  */
-int ttl_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer) {
-    void *arg_1 = NULL;
-    arg_1 = strtok(command, " ");
-    if (arg_1) {
-        trim(arg_1);
+int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
+    void *key = strtok(command, " ");
+    if (key) {
+        trim(key);
         map_entry *kv = (map_entry *) malloc(sizeof(map_entry));
-        kv = map_get_entry(instance.store, arg_1);
+        kv = map_get_entry(instance.store, key);
         if (kv) {
             char ttl[7];
             if (kv->has_expire_time)
@@ -810,13 +816,13 @@ int ttl_command(char *command, int sock_fd, int resp_fd, unsigned int from_peer)
                 sprintf(ttl, "%d\n", -1);
             if (instance.cluster_mode == 1 && from_peer == 1) {
                 struct message msg;
-                msg.fd = resp_fd;
+                msg.fd = rfd;
                 msg.content = ttl;
                 msg.from_peer = 1;
                 char *payload = serialize(msg);
-                send(sock_fd, payload, strlen(ttl) + S_OFFSET, 0);
+                send(sfd, payload, strlen(ttl) + S_OFFSET, 0);
                 free(payload);
-            } else send(sock_fd, ttl, 7, 0);
+            } else send(sfd, ttl, 7, 0);
         }
     } else return MAP_ERR;
     return 0;

@@ -46,6 +46,7 @@ int is_float(const char *);
 int to_int(const char *);
 double to_double(const char *);
 const char *node_name(unsigned int);
+const char *get_homedir(void);
 
 void s_log(loglevel, const char *, ...);
 

@@ -20,6 +20,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -81,9 +82,12 @@ int main(int argc, char **argv) {
 
     /* Initialize random seed */
     srand((unsigned int) time(NULL));
+    const char *home = get_homedir();
     char *address = "127.0.0.1";
     char *port = "8082";
-    char *filename = "./conf/cluster.conf";
+    char *confpath = "/.shibui";    // default path for configuration ~/.shibui
+    char *filename = malloc(strlen(home) + strlen(confpath));
+    sprintf(filename, "%s%s", home, confpath);
     char *id = "A";
     int opt, cluster_mode = 0;
     static pthread_t thread;
@@ -138,6 +142,12 @@ int main(int argc, char **argv) {
         char line[256];
         int linenr = 0;
 
+        if (file == NULL) {
+            perror("Couldn't open the configuration file\n");
+            free(filename);
+            exit(EXIT_FAILURE);
+        }
+
         while (fgets(line, 256, (FILE *) file) != NULL) {
 
             char *ip = malloc(15), *pt = malloc(5), *name = malloc(256);
@@ -179,6 +189,8 @@ int main(int argc, char **argv) {
             cluster_add_node(new_node);
 
         }
+
+        fclose(file);
 
         /* start forming the thread */
         if (pthread_create(&thread, NULL, &form_cluster_thread, NULL) != 0)

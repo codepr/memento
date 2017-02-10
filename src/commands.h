@@ -52,6 +52,7 @@ int services_array_len(void);
 // Commands
 int set_command(char *);
 int del_command(char *);
+int expire_command(char *);
 int inc_command(char *);
 int incf_command(char *);
 int dec_command(char *);

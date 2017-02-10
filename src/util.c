@@ -24,6 +24,8 @@
 #include <ctype.h>
 #include <string.h>
 #include <sys/time.h>
+#include <unistd.h>
+#include <pwd.h>
 #include <time.h>
 #include "util.h"
 #include "cluster.h"
@@ -240,6 +242,20 @@ const char *node_name(unsigned int len) {
 
     return node_name;
 
+}
+
+
+/*
+ * Find the home directory, checking if $HOME is set
+ */
+const char *get_homedir(void) {
+    const char *homedir;
+
+    if ((homedir = getenv("HOME")) == NULL) {
+        homedir = getpwuid(getuid())->pw_dir;
+    }
+
+    return homedir;
 }
 
 

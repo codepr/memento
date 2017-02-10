@@ -43,9 +43,6 @@ typedef struct {
     unsigned int has_expire_time : 1;
     long creation_time;
     long expire_time;
-    int *subscribers;
-    unsigned int last_subscriber;
-    queue *data_history;
 } map_entry;
 
 
@@ -54,8 +51,8 @@ typedef struct {
  * hold.
  */
 typedef struct {
-    unsigned int table_size;
-    unsigned int size;
+    unsigned long table_size;
+    unsigned long size;
     map_entry *entries;
 } map;
 
@@ -68,15 +65,6 @@ void *map_get(map *, void *);
 map_entry *map_get_entry(map *, void *);
 int map_del(map *, void *);
 int map_iterate(map *, func, void *);
-// int m_prefscan(map_t, func, any_t, int);
-// int m_fuzzyscan(map_t, func, any_t, int);
-// int m_get_map_entry(map_t, char *, map_entry *);
-// int m_set_expire_time(map_t, char *, long);
-// int m_remove(map_t, char *);
-// int m_sub(map_t, char *, int);
-// int m_sub_from(map_t, char *, int, int);
-// int m_unsub(map_t, char *, int);
-// int m_pub(map_t, char *, any_t);
-// int m_length(map_t);
+
 
 #endif

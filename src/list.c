@@ -148,7 +148,8 @@ static list_node *bisect_list(list_node *head) {
 
 
 /*
- * Merges two list by using the head node of the two
+ * Merges two list by using the head node of the two, sorting them according to
+ * lexigraphical ordering of the node names.
  */
 static list_node *merge_list(list_node *list1, list_node *list2) {
     list_node dummy_head = { NULL, NULL }, *tail = &dummy_head;
@@ -173,7 +174,7 @@ static list_node *merge_list(list_node *list1, list_node *list2) {
 
 
 /*
- * Merge sort for list, based on the score_t field of every node
+ * Merge sort for cluster nodes list, based on the name field of every node
  */
 list_node *merge_sort(list_node *head) {
     list_node *list1 = head;

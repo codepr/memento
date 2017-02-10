@@ -27,7 +27,10 @@
 #include <string.h>
 #include "util.h"
 
-/* retrieve a valid index to distribute key inside a partitions array */
+
+/*
+ * Basic hasing function, uses CRC32
+ */
 int _hash(char *keystring) {
 
     unsigned long key = CRC32((unsigned char *) (keystring), strlen(keystring));
@@ -48,6 +51,10 @@ int _hash(char *keystring) {
     return key;
 }
 
+
+/*
+ * Jenkins hash function
+ */
 uint32_t jenkins_one_at_a_time_hash(const uint8_t* key, size_t length) {
     size_t i = 0;
     uint32_t hash = 0;
@@ -63,10 +70,13 @@ uint32_t jenkins_one_at_a_time_hash(const uint8_t* key, size_t length) {
 }
 
 
-uint32_t murmur3_32(const uint8_t* key, size_t len, uint32_t seed) {
+/*
+ * Murmur 3 function, should be initialized using a random seed
+ */
+uint32_t murmur3_32(const uint8_t *key, size_t len, uint32_t seed) {
     uint32_t h = seed;
     if (len > 3) {
-        const uint32_t* key_x4 = (const uint32_t*) key;
+        const uint32_t *key_x4 = (const uint32_t *) key;
         size_t i = len >> 2;
         do {
             uint32_t k = *key_x4++;
@@ -77,7 +87,7 @@ uint32_t murmur3_32(const uint8_t* key, size_t len, uint32_t seed) {
             h = (h << 13) | (h >> 19);
             h += (h << 2) + 0xe6546b64;
         } while (--i);
-        key = (const uint8_t*) key_x4;
+        key = (const uint8_t *) key_x4;
     }
     if (len & 3) {
         size_t i = len & 3;
