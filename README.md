@@ -55,7 +55,7 @@ It is possible to generate basic configurations using the helper script
 build_cluster.py, it accepts just the address and port of every node, so
 to create 3 configuration file as the previous example just run:
 
-    `$ python build_cluster.py 127.0.0.1 8081 127.0.0.1 8082 127.0.0.1 8083`
+    $ python build_cluster.py 127.0.0.1 8081 127.0.0.1 8082 127.0.0.1 8083
 
 This instruction will generate files `node0.conf`, `node1.conf` and `node2.conf`
 containing each the right configuration.
@@ -66,7 +66,7 @@ To build the source just run `make`. A `memento` executable will be generated in
 a `release` directory that can be started to listen on a defined `hostname`,
 ready to receive commands from any TCP client
 
-    `$ ./release/memento -a <hostname> -p <port>`
+    $ ./release/memento -a <hostname> -p <port>
 
 `-c` for a cluster mode start
 
@@ -75,10 +75,10 @@ ready to receive commands from any TCP client
 Parameter `<hostname>` and `<port>` fallback to 127.0.0.1 and 6737, memento accept also
 a -f parameter, it allows to specify a configuration file for cluster context.
 
-    `$ ./release/memento -a <master-hostname> -p <port> -c -f ./conf/node0.conf`
+    $ ./release/memento -a <master-hostname> -p <port> -c -f ./conf/node0.conf
 
 To build memento-cli just `make memento-cli` and run it like the following:
 
-    `$ ./release/memento-cli <hostname> <port>`
+    $ ./release/memento-cli <hostname> <port>
 
 
