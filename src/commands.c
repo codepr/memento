@@ -491,7 +491,7 @@ static int cluster_print_keys(void *t1, void *t2, void *t3) {
     key[strlen((char *) entry->key) + 2] = '\0';
     msg.content = key;
     char *payload = serialize(msg);
-    send(*sfd, payload, strlen(key) + S_OFFSET, 0);
+    send(*sfd, payload, strlen(entry->key) + 2 + S_OFFSET, 0);
     free(payload);
     return MAP_OK;
 }
@@ -518,7 +518,7 @@ static int cluster_print_values(void *t1, void *t2, void *t3) {
     snprintf(val, strlen((char *) entry->val) + 1, "%s\n", (char *) entry->val);
     msg.content = val;
     char *payload = serialize(msg);
-    send(*sfd, payload, strlen(val) + S_OFFSET, 0);
+    send(*sfd, payload, strlen(entry->val) + 2 + S_OFFSET, 0);
     free(payload);
     return MAP_OK;
 }
@@ -555,24 +555,26 @@ int set_command(char *command) {
  */
 int get_command(char *command, int sfd, int rfd, unsigned int from_peer) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        void *val = map_get(instance.store, key);
-        if (val) {
-            if (instance.cluster_mode == 1 && from_peer == 1) {
-                struct message m;
-                /* adding some informations about the node host */
-                char response[strlen((char *) val) + strlen(self.addr) + strlen(self.name) + 9];
-                sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, (char *) val);
-                m.content = response;
-                m.fd = rfd;
-                m.from_peer = 1;
-                char *payload = serialize(m);
-                send(sfd, payload, strlen(response) + S_OFFSET, 0);
-                free(payload);
-            } else send(sfd, val, strlen((char *) val), 0);
-            ret = 1;
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            void *val = map_get(instance.store, key);
+            if (val) {
+                if (instance.cluster_mode == 1 && from_peer == 1) {
+                    struct message m;
+                    /* adding some informations about the node host */
+                    char response[strlen((char *) val) + strlen(self.addr) + strlen(self.name) + 9];
+                    sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, (char *) val);
+                    m.content = response;
+                    m.fd = rfd;
+                    m.from_peer = 1;
+                    char *payload = serialize(m);
+                    send(sfd, payload, strlen(response) + S_OFFSET, 0);
+                    free(payload);
+                } else send(sfd, val, strlen((char *) val), 0);
+                ret = 1;
+            }
         }
     }
     return ret;
@@ -591,39 +593,41 @@ int get_command(char *command, int sfd, int rfd, unsigned int from_peer) {
  */
 int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        map_entry *kv = map_get_entry(instance.store, key);
-        if (kv) {
-            size_t kvstrsize = strlen(kv->key)
-                + strlen((char *) kv->val) + (sizeof(long) * 2) + 128;
-            char *kvstring = (char *) malloc(kvstrsize); // long numbers
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            map_entry *kv = map_get_entry(instance.store, key);
+            if (kv) {
+                size_t kvstrsize = strlen(kv->key)
+                    + strlen((char *) kv->val) + (sizeof(long) * 2) + 128;
+                char *kvstring = (char *) malloc(kvstrsize); // long numbers
 
-            /* check if expire time is set */
-            char expire_time[7];
-            if (kv->has_expire_time)
-                sprintf(expire_time, "%ld\n", kv->expire_time / 1000);
-            else
-                sprintf(expire_time, "%d\n", -1);
+                /* check if expire time is set */
+                char expire_time[7];
+                if (kv->has_expire_time)
+                    sprintf(expire_time, "%ld\n", kv->expire_time / 1000);
+                else
+                    sprintf(expire_time, "%d\n", -1);
 
-            /* format answer */
-            sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %s\n",
-                    (char *) kv->key, (char *) kv->val, kv->creation_time, expire_time);
-            if (instance.cluster_mode == 1 && from_peer == 1) {
-                struct message m;
-                /* adding some informations about the node host */
-                char response[strlen(kvstring) + strlen(self.addr) + strlen(self.name) + 18];
-                sprintf(response, "Node: %s:%s:%d\n%s\n", self.name, self.addr, self.port, kvstring);
-                m.content = response;
-                m.fd = rfd;
-                m.from_peer = 1;
-                char *payload = serialize(m);
-                send(sfd, payload, strlen(response) + S_OFFSET, 0);
-                free(payload);
-            } else send(sfd, kvstring, kvstrsize, 0);
-            free(kvstring);
-            ret = 1;
+                /* format answer */
+                sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %s\n",
+                        (char *) kv->key, (char *) kv->val, kv->creation_time, expire_time);
+                if (instance.cluster_mode == 1 && from_peer == 1) {
+                    struct message m;
+                    /* adding some informations about the node host */
+                    char response[strlen(kvstring) + strlen(self.addr) + strlen(self.name) + 18];
+                    sprintf(response, "Node: %s:%s:%d\n%s\n", self.name, self.addr, self.port, kvstring);
+                    m.content = response;
+                    m.fd = rfd;
+                    m.from_peer = 1;
+                    char *payload = serialize(m);
+                    send(sfd, payload, strlen(response) + S_OFFSET, 0);
+                    free(payload);
+                } else send(sfd, kvstring, kvstrsize, 0);
+                free(kvstring);
+                ret = 1;
+            }
         }
     }
     return ret;
@@ -641,11 +645,13 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
  */
 int del_command(char *command) {
     int ret = 0;
-    void *key = strtok(command, " ");
-    while (key) {
-        trim(key);
-        ret = map_del(instance.store, key);
-        key = strtok(NULL, " ");
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        while (key) {
+            trim(key);
+            ret = map_del(instance.store, key);
+            key = strtok(NULL, " ");
+        }
     }
     return ret;
 }
@@ -664,20 +670,22 @@ int del_command(char *command) {
  */
 int inc_command(char *command) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        void *val = map_get(instance.store, key);
-        if (val) {
-            char *s = (char *) val;
-            if (ISINT(s) == 1) {
-                int v = GETINT(s);
-                char *by = strtok(NULL, " ");
-                if (by && ISINT(by)) {
-                    v += GETINT(by);
-                } else v++;
-                sprintf(val, "%d\n", v);
-                ret = 0;
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            void *val = map_get(instance.store, key);
+            if (val) {
+                char *s = (char *) val;
+                if (ISINT(s) == 1) {
+                    int v = GETINT(s);
+                    char *by = strtok(NULL, " ");
+                    if (by && ISINT(by)) {
+                        v += GETINT(by);
+                    } else v++;
+                    sprintf(val, "%d\n", v);
+                    ret = 0;
+                }
             }
         }
     }
@@ -697,20 +705,22 @@ int inc_command(char *command) {
  */
 int incf_command(char *command) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        void *val = map_get(instance.store, key);
-        if (val) {
-            char *s = (char *) val;
-            if (is_float(s) == 1) {
-                double v = GETDOUBLE(s);
-                char *by = strtok(NULL, " ");
-                if (by && is_float(by)) {
-                    v += GETDOUBLE(by);
-                } else v += 1.0;
-                sprintf(val, "%lf\n", v);
-                ret = 0;
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            void *val = map_get(instance.store, key);
+            if (val) {
+                char *s = (char *) val;
+                if (is_float(s) == 1) {
+                    double v = GETDOUBLE(s);
+                    char *by = strtok(NULL, " ");
+                    if (by && is_float(by)) {
+                        v += GETDOUBLE(by);
+                    } else v += 1.0;
+                    sprintf(val, "%lf\n", v);
+                    ret = 0;
+                }
             }
         }
     }
@@ -730,20 +740,22 @@ int incf_command(char *command) {
  */
 int dec_command(char *command) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        void *val = map_get(instance.store, key);
-        if (val) {
-            char *s = (char *) val;
-            if(ISINT(s) == 1) {
-                int v = GETINT(s);
-                char *by = strtok(NULL, " ");
-                if (by != NULL && ISINT(by)) {
-                    v -= GETINT(by);
-                } else v--;
-                sprintf(val, "%d\n", v);
-                ret = 0;
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            void *val = map_get(instance.store, key);
+            if (val) {
+                char *s = (char *) val;
+                if(ISINT(s) == 1) {
+                    int v = GETINT(s);
+                    char *by = strtok(NULL, " ");
+                    if (by != NULL && ISINT(by)) {
+                        v -= GETINT(by);
+                    } else v--;
+                    sprintf(val, "%d\n", v);
+                    ret = 0;
+                }
             }
         }
     }
@@ -763,20 +775,22 @@ int dec_command(char *command) {
  */
 int decf_command(char *command) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        void *val = map_get(instance.store, key);
-        if (val) {
-            char *s = (char *) val;
-            if(is_float(s) == 1) {
-                double v = GETDOUBLE(s);
-                char *by = strtok(NULL, " ");
-                if (by != NULL && ISINT(by)) {
-                    v -= GETDOUBLE(by);
-                } else v -= 1.0;
-                sprintf(val, "%lf\n", v);
-                ret = 0;
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            void *val = map_get(instance.store, key);
+            if (val) {
+                char *s = (char *) val;
+                if(is_float(s) == 1) {
+                    double v = GETDOUBLE(s);
+                    char *by = strtok(NULL, " ");
+                    if (by != NULL && ISINT(by)) {
+                        v -= GETDOUBLE(by);
+                    } else v -= 1.0;
+                    sprintf(val, "%lf\n", v);
+                    ret = 0;
+                }
             }
         }
     }
@@ -790,20 +804,22 @@ int decf_command(char *command) {
  * Doesn't require any argument.
  */
 int count_command(int sfd, int rfd, unsigned int from_peer) {
-    unsigned long len = instance.store->size;
-    char c_len[16];
-    snprintf(c_len, 16, "%lu\n", len);
-    if (instance.cluster_mode == 1 && from_peer == 1) {
-        struct message msg;
-        msg.fd = rfd;
-        msg.from_peer = 1;
-        char response[strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9];
-        sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, c_len);
-        msg.content = response;
-        char *payload = serialize(msg);
-        send(sfd, payload, strlen(response) + S_OFFSET, 0);
-        free(payload);
-    } else send(sfd, c_len, 16, 0);
+    if (instance.store) {
+        unsigned long len = instance.store->size;
+        char c_len[16];
+        snprintf(c_len, 16, "%lu\n", len);
+        if (instance.cluster_mode == 1 && from_peer == 1) {
+            struct message msg;
+            msg.fd = rfd;
+            msg.from_peer = 1;
+            char response[strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9];
+            sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, c_len);
+            msg.content = response;
+            char *payload = serialize(msg);
+            send(sfd, payload, strlen(response) + S_OFFSET, 0);
+            free(payload);
+        } else send(sfd, c_len, 16, 0);
+    }
     return 1;
 }
 
@@ -814,11 +830,13 @@ int count_command(int sfd, int rfd, unsigned int from_peer) {
  * Doesn't require any argument.
  */
 int keys_command(int sfd, int rfd, unsigned int from_peer) {
-    if (instance.store->size > 0) {
-        if (instance.cluster_mode == 1 && from_peer == 1) {
-            map_iterate3(instance.store, cluster_print_keys, &sfd, &rfd);
-        } else {
-            map_iterate2(instance.store, print_keys, &sfd);
+    if (instance.store) {
+        if (instance.store->size > 0) {
+            if (instance.cluster_mode == 1 && from_peer == 1) {
+                map_iterate3(instance.store, cluster_print_keys, &sfd, &rfd);
+            } else {
+                map_iterate2(instance.store, print_keys, &sfd);
+            }
         }
     }
     return 1;
@@ -831,11 +849,13 @@ int keys_command(int sfd, int rfd, unsigned int from_peer) {
  * Doesn't require any argument.
  */
 int values_command(int sfd, int rfd, unsigned int from_peer) {
-    if (instance.store->size > 0) {
-        if (instance.cluster_mode == 1 && from_peer == 1) {
-            map_iterate3(instance.store, cluster_print_values, &sfd, &rfd);
-        } else {
-            map_iterate2(instance.store, print_values, &sfd);
+    if (instance.store) {
+        if (instance.store->size > 0) {
+            if (instance.cluster_mode == 1 && from_peer == 1) {
+                map_iterate3(instance.store, cluster_print_values, &sfd, &rfd);
+            } else {
+                map_iterate2(instance.store, print_values, &sfd);
+            }
         }
     }
     return 1;
@@ -853,16 +873,18 @@ int values_command(int sfd, int rfd, unsigned int from_peer) {
  */
 int append_command(char *command) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    void *val = (char *) key + strlen(key) + 1;
-    if (key && val) {
-        char *key_holder = strdup(key);
-        char *val_holder = strdup(val);
-        void *_val = map_get(instance.store, key_holder);
-        if (_val) {
-            remove_newline(_val);
-            char *append = append_string(_val, val_holder);
-            ret = map_put(instance.store, key_holder, append);
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        void *val = (char *) key + strlen(key) + 1;
+        if (key && val) {
+            char *key_holder = strdup(key);
+            char *val_holder = strdup(val);
+            void *_val = map_get(instance.store, key_holder);
+            if (_val) {
+                remove_newline(_val);
+                char *append = append_string(_val, val_holder);
+                ret = map_put(instance.store, key_holder, append);
+            }
         }
     }
     return ret;
@@ -879,16 +901,18 @@ int append_command(char *command) {
  */
 int prepend_command(char *command) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    void *val = (char *) key + strlen(key) + 1;
-    if (key && val) {
-        char *key_holder = strdup(key);
-        char *val_holder = strdup(val);
-        void *_val = map_get(instance.store, key_holder);
-        if (_val) {
-            remove_newline(val_holder);
-            char *append = append_string(val_holder, _val);
-            ret = map_put(instance.store, key_holder, append);
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        void *val = (char *) key + strlen(key) + 1;
+        if (key && val) {
+            char *key_holder = strdup(key);
+            char *val_holder = strdup(val);
+            void *_val = map_get(instance.store, key_holder);
+            if (_val) {
+                remove_newline(val_holder);
+                char *append = append_string(val_holder, _val);
+                ret = map_put(instance.store, key_holder, append);
+            }
         }
     }
     return ret;
@@ -901,19 +925,21 @@ int prepend_command(char *command) {
  */
 int expire_command(char *command) {
     int ret = MAP_ERR;
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        map_entry *entry = (map_entry *) malloc(sizeof(map_entry));
-        entry = map_get_entry(instance.store, key);
-        void *val = (char *) key + strlen(key) + 1;
-        if (val) {
-            long ts = current_timestamp();
-            int intval = GETINT(val);
-            entry->has_expire_time = 1;
-            entry->creation_time = ts;
-            entry->expire_time = ts + (long) intval;
-            ret = MAP_OK;
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            map_entry *entry = (map_entry *) malloc(sizeof(map_entry));
+            entry = map_get_entry(instance.store, key);
+            void *val = (char *) key + strlen(key) + 1;
+            if (val) {
+                long ts = current_timestamp();
+                int intval = GETINT(val);
+                entry->has_expire_time = 1;
+                entry->creation_time = ts;
+                entry->expire_time = ts + (long) intval;
+                ret = MAP_OK;
+            }
         }
     }
     return ret;
@@ -929,28 +955,30 @@ int expire_command(char *command) {
  *     TTL <key>
  */
 int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
-    void *key = strtok(command, " ");
-    if (key) {
-        trim(key);
-        map_entry *kv = (map_entry *) malloc(sizeof(map_entry));
-        kv = map_get_entry(instance.store, key);
-        if (kv) {
-            char ttl[7];
-            if (kv->has_expire_time)
-                sprintf(ttl, "%ld\n", kv->expire_time / 1000);
-            else
-                sprintf(ttl, "%d\n", -1);
-            if (instance.cluster_mode == 1 && from_peer == 1) {
-                struct message msg;
-                msg.fd = rfd;
-                msg.content = ttl;
-                msg.from_peer = 1;
-                char *payload = serialize(msg);
-                send(sfd, payload, strlen(ttl) + S_OFFSET, 0);
-                free(payload);
-            } else send(sfd, ttl, 7, 0);
-        }
-    } else return MAP_ERR;
+    if (instance.store) {
+        void *key = strtok(command, " ");
+        if (key) {
+            trim(key);
+            map_entry *kv = (map_entry *) malloc(sizeof(map_entry));
+            kv = map_get_entry(instance.store, key);
+            if (kv) {
+                char ttl[7];
+                if (kv->has_expire_time)
+                    sprintf(ttl, "%ld\n", kv->expire_time / 1000);
+                else
+                    sprintf(ttl, "%d\n", -1);
+                if (instance.cluster_mode == 1 && from_peer == 1) {
+                    struct message msg;
+                    msg.fd = rfd;
+                    msg.content = ttl;
+                    msg.from_peer = 1;
+                    char *payload = serialize(msg);
+                    send(sfd, payload, strlen(ttl) + S_OFFSET, 0);
+                    free(payload);
+                } else send(sfd, ttl, 7, 0);
+            }
+        } else return MAP_ERR;
+    }
     return 0;
 }
 
@@ -961,8 +989,10 @@ int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
  * Doesn't require any argument.
  */
 int flush_command(void) {
-    if (instance.store != NULL)
+    if (instance.store != NULL) {
         map_release(instance.store);
+        instance.store = NULL;
+    }
     return OK;
 }
 
