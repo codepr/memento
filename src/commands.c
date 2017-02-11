@@ -315,7 +315,10 @@ int command_handler(int fd, int from_peer) {
                             route_command(idx, fd, del, &msg);
                             key = strtok(NULL, " ");
                         }
-                    } else if (strncasecmp(command, "count", 5) == 0) {
+                    } else if (strncasecmp(command, "count", 5) == 0 ||
+                            strncasecmp(command, "keys", 4) == 0 ||
+                            strncasecmp(command, "values", 6) == 0 ||
+                            strncasecmp(command, "flush", 5) == 0) {
                         /* it is a global command, must handle this differently
                          * TODO: implement a better way to handle this case
                          */
@@ -461,7 +464,7 @@ static void remove_newline(char *str) {
 
 
 /* callback function to print all keys inside the hashmap */
-static int print_keys(void * t1, void * t2) {
+static int print_keys(void *t1, void *t2) {
     map_entry *kv = (map_entry *) t2;
     int *fd = (int *) t1;
     char *stringkey = (char *) malloc(strlen(kv->key) + 1);
@@ -474,11 +477,49 @@ static int print_keys(void * t1, void * t2) {
     return MAP_OK;
 }
 
+
+/* callback function to print all keys inside the hashmap in a cluster context */
+static int cluster_print_keys(void *t1, void *t2, void *t3) {
+    map_entry *entry = (map_entry *) t3;
+    int *sfd = (int *) t1;
+    int *rfd = (int *) t2;
+    struct message msg;
+    msg.from_peer = 1;
+    msg.fd = *rfd;
+    char *key = malloc(strlen((char *) entry->key) + 2);
+    snprintf(key, strlen((char *) entry->key) + 2, "%s\n\n", (char *) entry->key);
+    key[strlen((char *) entry->key) + 2] = '\0';
+    msg.content = key;
+    char *payload = serialize(msg);
+    send(*sfd, payload, strlen(key) + S_OFFSET, 0);
+    free(payload);
+    return MAP_OK;
+}
+
+
 /* callback function to print all values inside the hashmap */
-static int print_values(void * t1, void * t2) {
-    map_entry *kv = (map_entry *) t2;
+static int print_values(void *t1, void *t2) {
+    map_entry *entry = (map_entry *) t2;
     int *fd = (int *) t1;
-    send(*fd, kv->val, strlen(kv->val), 0);
+    send(*fd, entry->val, strlen(entry->val), 0);
+    return MAP_OK;
+}
+
+
+/* callback function to print all values inside the hashmap in a cluster context */
+static int cluster_print_values(void *t1, void *t2, void *t3) {
+    map_entry *entry = (map_entry *) t3;
+    int *sfd = (int *) t1;
+    int *rfd = (int *) t2;
+    struct message msg;
+    msg.from_peer = 1;
+    msg.fd = *rfd;
+    char *val = malloc(strlen((char *) entry->val) + 1);
+    snprintf(val, strlen((char *) entry->val) + 1, "%s\n", (char *) entry->val);
+    msg.content = val;
+    char *payload = serialize(msg);
+    send(*sfd, payload, strlen(val) + S_OFFSET, 0);
+    free(payload);
     return MAP_OK;
 }
 
@@ -773,8 +814,13 @@ int count_command(int sfd, int rfd, unsigned int from_peer) {
  * Doesn't require any argument.
  */
 int keys_command(int sfd, int rfd, unsigned int from_peer) {
-    if (instance.store->size > 0)
-        map_iterate(instance.store, print_keys, &sfd);
+    if (instance.store->size > 0) {
+        if (instance.cluster_mode == 1 && from_peer == 1) {
+            map_iterate3(instance.store, cluster_print_keys, &sfd, &rfd);
+        } else {
+            map_iterate2(instance.store, print_keys, &sfd);
+        }
+    }
     return 1;
 }
 
@@ -785,8 +831,13 @@ int keys_command(int sfd, int rfd, unsigned int from_peer) {
  * Doesn't require any argument.
  */
 int values_command(int sfd, int rfd, unsigned int from_peer) {
-    if (instance.store->size > 0)
-        map_iterate(instance.store, print_values, &sfd);
+    if (instance.store->size > 0) {
+        if (instance.cluster_mode == 1 && from_peer == 1) {
+            map_iterate3(instance.store, cluster_print_values, &sfd, &rfd);
+        } else {
+            map_iterate2(instance.store, print_values, &sfd);
+        }
+    }
     return 1;
 }
 

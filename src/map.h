@@ -23,15 +23,16 @@
 #define MAP_H
 
 
-#define MAP_OK 0
-#define MAP_ERR -1
-#define MAP_FULL -2
-#define INITIAL_SIZE (256)
-#define MAX_CHAIN_LENGTH (8)
-#define SUBSCRIBER_SIZE (64)
+#define MAP_OK              0
+#define MAP_ERR             -1
+#define MAP_FULL            -2
+#define INITIAL_SIZE        (256)
+#define MAX_CHAIN_LENGTH    (8)
+#define SUBSCRIBER_SIZE     (64)
 
 
 typedef int (*func)(void *, void *);
+typedef int (*func3)(void *, void *, void *);
 
 
 /* We need to keep keys and values */
@@ -63,7 +64,8 @@ int map_put(map *, void *, void *);
 void *map_get(map *, void *);
 map_entry *map_get_entry(map *, void *);
 int map_del(map *, void *);
-int map_iterate(map *, func, void *);
+int map_iterate2(map *, func, void *);
+int map_iterate3(map *, func3, void *, void *);
 
 
 #endif

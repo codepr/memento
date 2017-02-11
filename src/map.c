@@ -240,14 +240,34 @@ int map_del(map *m, void *key) {
  * additional any_t argument is passed to the function as its first
  * argument and the pair is the second.
  */
-int map_iterate(map *m, func f, void *item) {
+int map_iterate2(map *m, func f, void *arg1) {
     /* On empty hashmap, return immediately */
     if (m->size <= 0) return MAP_ERR;
     /* Linear probing */
     for(int i = 0; i < m->table_size; i++) {
         if (m->entries[i].in_use != 0) {
             map_entry data = m->entries[i];
-            int status = f(item, &data);
+            int status = f(arg1, &data);
+            if (status != MAP_OK) return status;
+        }
+    }
+    return MAP_OK;
+}
+
+
+/*
+ * Iterate the function parameter over each element in the hashmap.  The
+ * additional any_t argument is passed to the function as its first
+ * argument and the pair is the second.
+ */
+int map_iterate3(map *m, func3 f, void *arg1, void *arg2) {
+    /* On empty hashmap, return immediately */
+    if (m->size <= 0) return MAP_ERR;
+    /* Linear probing */
+    for(int i = 0; i < m->table_size; i++) {
+        if (m->entries[i].in_use != 0) {
+            map_entry data = m->entries[i];
+            int status = f(arg1, arg2, &data);
             if (status != MAP_OK) return status;
         }
     }
@@ -274,7 +294,7 @@ static int destroy(void *t1, void *t2) {
 
 /* Deallocate the hashmap */
 void map_release(map *m){
-    map_iterate(m, destroy, NULL);
+    map_iterate2(m, destroy, NULL);
     if (m) {
         if (m->entries)
             free(m->entries);

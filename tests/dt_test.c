@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "unit.h"
 #include "../src/map.h"
@@ -40,6 +41,10 @@ static char *test_map_put(void) {
     int status = map_put(m, strdup(key), strdup(val));
     ASSERT("[! put]: map size = 0", m->size == 1);
     ASSERT("[! put]: put didn't work as expected", status == MAP_OK);
+    char *val1 = "WORLD";
+    map_put(m, strdup(key), strdup(val1));
+    void *ret = map_get(m, key);
+    ASSERT("[! put]: put didn't update the value", strcmp(val1, ret) == 0);
     map_release(m);
     return 0;
 }
@@ -71,6 +76,35 @@ static char *test_map_del(void) {
     int status = map_del(m, key);
     ASSERT("[! del]: map size = 1", m->size == 0);
     ASSERT("[! del]: del didn't work as expected", status == MAP_OK);
+    map_release(m);
+    return 0;
+}
+
+
+/*
+ * Tests the iteration of map_iterate2
+ */
+static int destroy_map(void *arg1, void *arg2) {
+    map_entry *entry = (map_entry *) arg2;
+    char *alt = "altered";
+    strcpy(entry->val, alt);
+    return 0;
+}
+
+static char *test_map_iterate2(void) {
+    map *m = map_create();
+    char *key0 = "hello";
+    char *val0 = "world";
+    char *key1 = "this";
+    char *val1 = "time";
+    map_put(m, strdup(key0), strdup(val0));
+    map_put(m, strdup(key1), strdup(val1));
+    map_iterate2(m, destroy_map, NULL);
+    char *v0 = (char *) map_get(m, key0);
+    char *v1 = (char *) map_get(m, key1);
+    char *alt = "altered";
+    ASSERT("[! iterate2]: iteration function is not correctly applied",
+            (strncmp(v0, alt, 7) == 0) && (strncmp(v1, alt, 7) == 0));
     map_release(m);
     return 0;
 }
@@ -135,6 +169,7 @@ static char *all_tests() {
     RUN_TEST(test_map_put);
     RUN_TEST(test_map_get);
     RUN_TEST(test_map_del);
+    RUN_TEST(test_map_iterate2);
     RUN_TEST(test_list_create);
     RUN_TEST(test_list_release);
     RUN_TEST(test_list_head_insert);
