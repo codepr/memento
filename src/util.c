@@ -216,6 +216,7 @@ int to_int(const char *s) {
     return len;
 }
 
+
 /* auxiliary function to convert double contained inside a string int a double */
 double to_double(const char *s) {
     double dnum;

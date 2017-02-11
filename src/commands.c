@@ -32,6 +32,9 @@
 #include "util.h"
 
 
+/* Private functions declarations */
+static void get_clusterinfo(int sfd);
+
 /*
  * Array of commands that doesn't need a file descriptor, they exclusively
  * perform side-effects on the keyspace
@@ -55,7 +58,7 @@ const char *enumerates[] = { "count", "keys", "values" };
  * Array of service-commands, currently there's just one command resident here
  * flush the whole keyspace by deleting all contents and freeing up space.
  */
-const char *services[]   = {"flush"};
+const char *services[]   = { "flush", "clusterinfo" };
 
 /*
  * Length of the commands-arrays, cannot be retrieved with a generic function by
@@ -123,6 +126,10 @@ int check_command(char *buffer) {
 }
 
 
+/*
+ * Utility function, get a valid index in the range of the cluster buckets, so
+ * it is possible to route command to the correct node
+ */
 static int hash(char *key) {
     uint32_t seed = 65133; // initial seed for murmur hashing
     if (key) {
@@ -140,6 +147,10 @@ static int hash(char *key) {
 }
 
 
+/*
+ * Utility function used to respond to clients with one of the common answers
+ * based on the outcome of the command call
+ */
 static int answer(int fd, int resp) {
     switch (resp) {
         case MAP_OK:
@@ -158,6 +169,42 @@ static int answer(int fd, int resp) {
             break;
     }
     return 0;
+}
+
+
+/*
+ * Helper function to route command to the node into which keyspace contains
+ * idx
+ */
+static void route_command(int idx, int fd, char *b, struct message *msg) {
+    /*
+     * send the message serialized according to the routing table
+     * cluster
+     */
+    list_node *cursor = instance.cluster->head;
+    while(cursor) {
+        cluster_node *n = (cluster_node *) cursor->data;
+        LOG(DEBUG, "[*] Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
+                n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
+        if (idx >= n->range_min && idx <= n->range_max) {
+            /* check if the range is in the current node */
+            if (n->self == 1) {
+                answer(fd, process_command(b, fd, fd, 0));
+                break;
+            } else {
+                msg->content = b;
+                msg->fd = fd;
+                msg->from_peer = 0;
+                char *payload = serialize(*msg);
+                send(n->fd, payload, strlen(b) + S_OFFSET, 0);
+                free(payload);
+                LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
+                break;
+            }
+        }
+        cursor = cursor->next;
+    }
+
 }
 
 
@@ -250,38 +297,32 @@ int command_handler(int fd, int from_peer) {
                     command = strtok(buf, " \r\n");
                     LOG(DEBUG, "Command : %s\n", command);
 
-                    /* command is handled */
-                    char *arg_1 = NULL;
-                    arg_1 = strtok(NULL, " ");
-                    LOG(DEBUG, "Key : %s\n", arg_1);
-                    int idx = hash(arg_1);
+                    if (strncasecmp(command, "clusterinfo", 11) == 0) {
+                        /* it is an informative command, no need to route it */
+                        get_clusterinfo(fd);
 
-                    /*
-                     * send the message serialized according to the routing table
-                     * cluster
-                     */
-                    list_node *cursor = instance.cluster->head;
-                    while(cursor) {
-                        cluster_node *n = (cluster_node *) cursor->data;
-                        LOG(DEBUG, "[*] Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
-                                n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
-                        if (idx >= n->range_min && idx <= n->range_max) {
-                            /* check if the range is in the current node */
-                            if (n->self == 1) {
-                                answer(fd, process_command(b, fd, fd, 0));
-                                break;
-                            } else {
-                                msg.content = b;
-                                msg.fd = fd;
-                                msg.from_peer = 0;
-                                char *payload = serialize(msg);
-                                send(n->fd, payload, strlen(b) + S_OFFSET, 0);
-                                free(payload);
-                                LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
-                                break;
-                            }
+                    } else if (strncasecmp(command, "del", 3) == 0) {
+                        /* it is a multi key command (the only one currently is 'DEL')
+                         * must handle it differently
+                         * TODO: implement a better way to handle this case, this one can
+                         * be considered as an ugly patch
+                         */
+                        char *key = strtok(NULL, " ");
+                        while (key) {
+                            int idx = hash(key);
+                            char del[5 + strlen(key)];
+                            snprintf(del, 5 + strlen(key), "del %s\r\n", key);
+                            route_command(idx, fd, del, &msg);
+                            key = strtok(NULL, " ");
                         }
-                        cursor = cursor->next;
+                    } else {
+                        /* command is handled and it isn't an informative one */
+                        char *arg_1 = strtok(NULL, " ");
+                        LOG(DEBUG, "Key : %s\n", arg_1);
+                        int idx = hash(arg_1);
+                        /* route the command to the correct node */
+                        route_command(idx, fd, b, &msg);
+
                     }
                 } else {
                     /* command received is not recognized or is a quit command */
@@ -496,8 +537,10 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
         trim(key);
         map_entry *kv = map_get_entry(instance.store, key);
         if (kv) {
-            char *kvstring = (char *) malloc(strlen(kv->key)
-                    + strlen((char *) kv->val) + (sizeof(long) * 2) + 128); // long numbers
+            size_t kvstrsize = strlen(kv->key)
+                + strlen((char *) kv->val) + (sizeof(long) * 2) + 128;
+            char *kvstring = (char *) malloc(kvstrsize); // long numbers
+
             /* check if expire time is set */
             char expire_time[7];
             if (kv->has_expire_time)
@@ -505,6 +548,7 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
             else
                 sprintf(expire_time, "%d\n", -1);
 
+            /* format answer */
             sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %s\n",
                     (char *) kv->key, (char *) kv->val, kv->creation_time, expire_time);
             if (instance.cluster_mode == 1 && from_peer == 1) {
@@ -516,15 +560,16 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
                 m.fd = rfd;
                 m.from_peer = 1;
                 char *payload = serialize(m);
-                send(sfd, payload, strlen(response) + (sizeof(int) * 2), 0);
+                send(sfd, payload, strlen(response) + S_OFFSET, 0);
                 free(payload);
-            } else send(sfd, kvstring, strlen(kvstring), 0);
+            } else send(sfd, kvstring, kvstrsize, 0);
             free(kvstring);
             ret = 1;
         }
     }
     return ret;
 }
+
 
 /*
  * DEL command handler, calculate in which position of the array of the
@@ -545,6 +590,7 @@ int del_command(char *command) {
     }
     return ret;
 }
+
 
 /*
  * INC command handler, calculate in which position of the array of the
@@ -783,10 +829,11 @@ int expire_command(char *command) {
         entry = map_get_entry(instance.store, key);
         void *val = (char *) key + strlen(key) + 1;
         if (val) {
+            long ts = current_timestamp();
             int intval = GETINT(val);
             entry->has_expire_time = 1;
-            entry->expire_time = (long) intval;
-            entry->creation_time = current_timestamp();
+            entry->creation_time = ts;
+            entry->expire_time = ts + (long) intval;
             ret = MAP_OK;
         }
     }
@@ -828,6 +875,7 @@ int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
     return 0;
 }
 
+
 /*
  * FLUSH command handler, delete the entire keyspace.
  *
@@ -839,3 +887,28 @@ int flush_command(void) {
     return OK;
 }
 
+
+/*
+ * CLUSTERINFO command handler, collect some informations of the cluster, used
+ * as a private function.
+ *
+ */
+static void get_clusterinfo(int sfd) {
+    if (instance.cluster_mode == 1) {
+        char info[1024 * instance.cluster->len];
+        int pos = 0;
+        list_node *cursor = instance.cluster->head;
+        while (cursor) {
+            cluster_node *n = (cluster_node *) cursor->data;
+            int size = strlen(n->name) + strlen(n->addr) + 47; // 47 for literal string
+            char *status = "reachable";
+            if (n->state == UNREACHABLE) status = "unreachable";
+            snprintf(info + pos, size, "%s - %s:%d - Key range: %d - %d %s\n", n->name,
+                    n->addr, n->port, n->range_min, n->range_max, status);
+            pos += size;
+            cursor = cursor->next;
+        }
+        /* info[pos] = '\0'; */
+        send(sfd, info, pos, 0);
+    }
+}

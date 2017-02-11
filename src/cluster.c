@@ -163,6 +163,7 @@ int cluster_unreachable_count(void) {
     return count;
 }
 
+
 /*
  * Sets the cluster node contained in the cluster list to state st
  */
@@ -206,6 +207,7 @@ cluster_node *cluster_get_node(const char *host, const char *port) {
     return NULL;
 
 }
+
 
 /*
  * Add a node to the cluster by joining

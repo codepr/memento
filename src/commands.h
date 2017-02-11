@@ -49,7 +49,7 @@ int queries_array_len(void);
 int enumerates_array_len(void);
 int services_array_len(void);
 
-// Commands
+/* Commands */
 int set_command(char *);
 int del_command(char *);
 int expire_command(char *);
@@ -59,15 +59,18 @@ int dec_command(char *);
 int decf_command(char *);
 int append_command(char *);
 int prepend_command(char *);
-// Queries
+
+/* Queries */
 int get_command(char *, int, int, unsigned int);
 int getp_command(char *, int, int, unsigned int);
 int ttl_command(char *, int, int, unsigned int);
-// enumerates
+
+/* Enumerates */
 int count_command(int, int, unsigned int);
 int keys_command(int, int, unsigned int);
 int values_command(int, int, unsigned int);
-// services
+
+/* Services */
 int flush_command(void);
 
 extern int (*cmds_func[]) (char *);
