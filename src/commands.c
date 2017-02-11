@@ -315,6 +315,25 @@ int command_handler(int fd, int from_peer) {
                             route_command(idx, fd, del, &msg);
                             key = strtok(NULL, " ");
                         }
+                    } else if (strncasecmp(command, "count", 5) == 0) {
+                        /* it is a global command, must handle this differently
+                         * TODO: implement a better way to handle this case
+                         */
+                        list_node *cursor = instance.cluster->head;
+                        while(cursor) {
+                            cluster_node *n = (cluster_node *) cursor->data;
+                            if (n->self == 1) answer(fd, process_command(b, fd, fd, 0));
+                            else {
+                                msg.content = b;
+                                msg.fd = fd;
+                                msg.from_peer = 0;
+                                char *payload = serialize(msg);
+                                send(n->fd, payload, strlen(b) + S_OFFSET, 0);
+                                free(payload);
+                                LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
+                            }
+                            cursor = cursor->next;
+                        }
                     } else {
                         /* command is handled and it isn't an informative one */
                         char *arg_1 = strtok(NULL, " ");
@@ -322,7 +341,6 @@ int command_handler(int fd, int from_peer) {
                         int idx = hash(arg_1);
                         /* route the command to the correct node */
                         route_command(idx, fd, b, &msg);
-
                     }
                 } else {
                     /* command received is not recognized or is a quit command */
@@ -734,7 +752,17 @@ int count_command(int sfd, int rfd, unsigned int from_peer) {
     unsigned long len = instance.store->size;
     char c_len[16];
     snprintf(c_len, 16, "%lu\n", len);
-    send(sfd, c_len, 16, 0);
+    if (instance.cluster_mode == 1 && from_peer == 1) {
+        struct message msg;
+        msg.fd = rfd;
+        msg.from_peer = 1;
+        char response[strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9];
+        sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, c_len);
+        msg.content = response;
+        char *payload = serialize(msg);
+        send(sfd, payload, strlen(response) + S_OFFSET, 0);
+        free(payload);
+    } else send(sfd, c_len, 16, 0);
     return 1;
 }
 
