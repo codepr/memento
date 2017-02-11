@@ -36,9 +36,9 @@ not strictly uppercase.
 Still in development and certainly bugged, it currently supports some commands
 in a distributed context across a cluster of machines. There isn't a replica
 system yet, planning to add it soon, currently the database can be started in
-cluster mode with the -c flag and by creating a configuration file on each
-node. As default behaviour, memento search for a ~/.memento file in $HOME, by
-the way it is also possible to define a different path.
+cluster mode with the `-c` flag and by creating a configuration file on each
+node. As default behaviour, memento search for a `~/.memento` file in `$HOME`,
+by the way it is also possible to define a different path.
 
 The configuration file shall strictly follow some rules, a sample could be:
 
@@ -66,6 +66,12 @@ This instruction will generate files `node0.conf`, `node1.conf` and
 `node2.conf` containing each the right configuration. It can be renamed to
 `.memento` and dropped in the `$HOME` path of every node, or can be passed to
 the program as argument using `-f` option.
+Every node of the cluster, will try to connect to other, if all goes well,
+every node should print a log message like this:
+
+    $ [INF][YYYY-mm-dd hh-mm-ss] - Cluster successfully formed
+
+From now on the system is ready to receive connections and commands.
 
 The distribution of keys and values follows a classic hashing addressing in a
 keyspace divided in equal buckets through the cluster. The total number of
