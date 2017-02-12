@@ -111,7 +111,7 @@ To build memento-cli just `make memento-cli` and run it like the following:
 ### Experimental
 
 The system is already blazing fast, testing it in a simple manner give already
-good results. Using a Linux box with ann Intel(R) Core(TM) i5-4210U CPU @
+good results. Using a Linux box with an Intel(R) Core(TM) i5-4210U CPU @
 1.70Ghz and 4 GB ram I get
 
 ```
