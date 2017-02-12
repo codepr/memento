@@ -99,9 +99,38 @@ The name of the node can be overridden with the `-i` option
 
     $ ./release/memento -a <hostname> -p <port> -c -f <path-to-conf> -i <name-id>
 
+It is also possible to stress-test the application by using `memento-benchmark`, previously
+generating it with `make memento-benchmark` command
+
+    $ ./release/memento-benchmark <hostname> <port>
+
 To build memento-cli just `make memento-cli` and run it like the following:
 
     $ ./release/memento-cli <hostname> <port>
+
+### Experimental
+
+The system is already blazing fast, testing it in a simple manner give already
+good results. Using a Linux box with ann Intel(R) Core(TM) i5-4210U CPU @
+1.70Ghz and 4 GB ram I get
+
+```
+ Nr. operations 100000
+
+ 1) SET keyone valueone
+ 2) GET keyone
+ 3) SET with growing keys
+ 4) All previous operations in 10 threads, each one performing 2000 requests per type
+
+ [SET] - Elapsed time: 0.871047 s  Op/s: 114804.37
+ [GET] - Elapsed time: 0.889411 s  Op/s: 112433.95
+ [SET] - Elapsed time: 0.923016 s  Op/s: 108340.48
+
+```
+
+I found that the server still crash sometimes when a lot of threads make a lot
+of concurrent requests, next step I'm planning to do is to use a pool of thread
+worker to read and write incoming data on the epoll server.
 
 ### Changelog
 

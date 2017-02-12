@@ -24,7 +24,7 @@
 
 #include "map.h"
 
-#define MAX_EVENTS (2048)
+#define MAX_EVENTS (1024)
 #define MAX_DATA_SIZE (10485760)
 
 
