@@ -133,7 +133,7 @@ int check_command(char *buffer) {
 static int hash(char *key) {
     uint32_t seed = 65133; // initial seed for murmur hashing
     if (key) {
-        char *holder = (char *) malloc(strlen(key));
+        char *holder = malloc(strlen(key));
         strcpy(holder, key);
         trim(holder);
         /* retrieve an index in the bucket range */
@@ -451,7 +451,7 @@ int (*srvs_func[]) (void) = {
 /* utility function, concat two strings togheter */
 static char *append_string(const char *str, const char *token) {
     size_t len = strlen(str) + strlen(token);
-    char *ret = (char *) malloc(len * sizeof(char) + 1);
+    char *ret = malloc(len * sizeof(char) + 1);
     *ret = '\0';
     return strcat(strcat(ret, str), token);
 }
@@ -467,8 +467,7 @@ static void remove_newline(char *str) {
 static int print_keys(void *t1, void *t2) {
     map_entry *kv = (map_entry *) t2;
     int *fd = (int *) t1;
-    char *stringkey = (char *) malloc(strlen(kv->key) + 1);
-    bzero(stringkey, strlen(stringkey));
+    char *stringkey = calloc(strlen(kv->key) + 1, sizeof(*stringkey));
     strcpy(stringkey, kv->key);
     char *key_nl = append_string(stringkey, "\n");
     send(*fd, key_nl, strlen(key_nl), 0);
@@ -601,7 +600,7 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
             if (kv) {
                 size_t kvstrsize = strlen(kv->key)
                     + strlen((char *) kv->val) + (sizeof(long) * 2) + 128;
-                char *kvstring = (char *) malloc(kvstrsize); // long numbers
+                char *kvstring = malloc(kvstrsize); // long numbers
 
                 /* check if expire time is set */
                 char expire_time[7];
@@ -929,7 +928,7 @@ int expire_command(char *command) {
         void *key = strtok(command, " ");
         if (key) {
             trim(key);
-            map_entry *entry = (map_entry *) malloc(sizeof(map_entry));
+            map_entry *entry = malloc(sizeof(map_entry));
             entry = map_get_entry(instance.store, key);
             void *val = (char *) key + strlen(key) + 1;
             if (val) {
@@ -959,7 +958,7 @@ int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
         void *key = strtok(command, " ");
         if (key) {
             trim(key);
-            map_entry *kv = (map_entry *) malloc(sizeof(map_entry));
+            map_entry *kv = malloc(sizeof(map_entry));
             kv = map_get_entry(instance.store, key);
             if (kv) {
                 char ttl[7];
@@ -1017,7 +1016,6 @@ static void get_clusterinfo(int sfd) {
             pos += size;
             cursor = cursor->next;
         }
-        /* info[pos] = '\0'; */
         send(sfd, info, pos, 0);
     }
 }

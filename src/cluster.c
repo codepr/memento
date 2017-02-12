@@ -225,8 +225,7 @@ int cluster_join(const char *host, const char *port) {
         if (cluster_reachable(n) == 0) cluster_set_state(n, REACHABLE);
     } else {
         /* create a new node and add it to the list */
-        cluster_node *new_node =
-            (cluster_node *) shb_malloc(sizeof(cluster_node));
+        cluster_node *new_node = shb_malloc(sizeof(cluster_node));
         new_node->addr = host;
         new_node->port = GETINT(port);
         new_node->fd = fd;

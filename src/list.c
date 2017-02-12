@@ -93,7 +93,7 @@ void list_release(list *l) {
  * Complexity: O(1)
  */
 list *list_head_insert(list *l, void *val) {
-    list_node *new_node = (list_node *) shb_malloc(sizeof(list_node));
+    list_node *new_node = shb_malloc(sizeof(list_node));
     new_node->data = val;
     if (l->len == 0) {
         l->head = l->tail = new_node;
@@ -112,7 +112,7 @@ list *list_head_insert(list *l, void *val) {
  * Complexity: O(1)
  */
 list *list_tail_insert(list *l, void *val) {
-    list_node *new_node = (list_node *) shb_malloc(sizeof(list_node));
+    list_node *new_node = shb_malloc(sizeof(list_node));
     new_node->data = val;
     new_node->next = NULL;
     if (l->len == 0) l->head = l->tail = new_node;

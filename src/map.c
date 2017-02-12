@@ -125,7 +125,7 @@ static int hashmap_rehash(map *m) {
  * dynamically allocated on the heap memory, so it must be released manually.
  */
 map *map_create(void) {
-    map *m = (map *) shb_malloc(sizeof(map));
+    map *m = shb_malloc(sizeof(map));
     if(!m) return NULL;
 
     m->entries = (map_entry *) calloc(INITIAL_SIZE, sizeof(map_entry));

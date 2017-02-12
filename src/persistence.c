@@ -39,7 +39,7 @@ int async_write(char *str)  {
 
     struct aiocb cb;
 
-    char *buf = (char *) malloc(strlen(str));
+    char *buf = malloc(strlen(str));
     strcpy(buf, str);
 
     memset(&cb, 0, sizeof(struct aiocb));

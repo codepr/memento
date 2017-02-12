@@ -222,8 +222,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                                     NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
                         LOG(DEBUG, "Connection request from node %s:%s\r\n", hbuf, sbuf);
                     /* create a new cluster node */
-                    cluster_node *new_node =
-                        (cluster_node *) shb_malloc(sizeof(cluster_node));
+                    cluster_node *new_node = shb_malloc(sizeof(cluster_node));
                     new_node->addr = hbuf;
                     new_node->port = GETINT(sbuf);
                     /* new_node->name = node_name(64); */

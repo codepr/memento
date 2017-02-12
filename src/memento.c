@@ -175,8 +175,7 @@ int main(int argc, char **argv) {
                     linenr, ip, pt, name, self_flag);
 
             /* create a new node and add it to the list */
-            cluster_node *new_node =
-                (cluster_node *) shb_malloc(sizeof(cluster_node));
+            cluster_node *new_node = shb_malloc(sizeof(cluster_node));
             new_node->addr = ip;
             new_node->port = GETINT(pt);
             new_node->state = UNREACHABLE;
