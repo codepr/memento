@@ -806,6 +806,7 @@ int count_command(int sfd, int rfd, unsigned int from_peer) {
     if (instance.store) {
         unsigned long len = instance.store->size;
         char c_len[16];
+        memset(c_len, 0x00, 16);
         snprintf(c_len, 16, "%lu\n", len);
         if (instance.cluster_mode == 1 && from_peer == 1) {
             struct message msg;

@@ -74,25 +74,16 @@ static int hashmap_hash(map *in, void *key) {
     return MAP_FULL;
 }
 
-/* Auxiliary function to determine wether a descriptor is already inside a
- * subscriber array, return the index position if it is contained, -1 otherwise
- */
-/* static int already_in(int *arr, int fd, int size) { */
-/*     for(int i = 0; i < size; i++) { */
-/*         if (arr[i] == fd) return i; */
-/*     } */
-/*     return -1; */
-/* } */
 
 /*
  * Doubles the size of the hashmap, and rehashes all the elements
  */
 static int hashmap_rehash(map *m) {
-    int old_size;
-    map_entry* curr;
+    unsigned long old_size;
+    map_entry *curr;
 
     /* Setup the new elements */
-    map_entry* temp = (map_entry *) calloc(2 * m->table_size, sizeof(map_entry));
+    map_entry *temp = calloc(2 * m->table_size, sizeof(map_entry));
     if (!temp) return MAP_ERR;
 
     /* Update the array */
@@ -105,7 +96,7 @@ static int hashmap_rehash(map *m) {
     m->size = 0;
 
     /* Rehash the elements */
-    for(int i = 0; i < old_size; i++) {
+    for(unsigned long i = 0; i < old_size; i++) {
         int status;
 
         if (curr[i].in_use == 0)
