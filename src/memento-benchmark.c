@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
 
     char *host = "127.0.0.1";
     char *port = "8082";
-    int thread_nr = 10;
+    int thread_nr = 20;
     pthread_t th[thread_nr];
 
     if (argc > 2) {
@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < thread_nr; ++i) {
         if (pthread_create(&th[i], NULL, make_requests, &conn) < 0)
             perror("pthread");
-        usleep(500);
+        usleep(1000);
     }
 
     for (int i = 0; i < thread_nr; ++i)
