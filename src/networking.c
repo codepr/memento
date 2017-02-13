@@ -27,15 +27,17 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <pthread.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/epoll.h>
+/* #include <sys/epoll.h> */
 #include <arpa/inet.h>
 #include "networking.h"
 #include "serializer.h"
 #include "commands.h"
 #include "cluster.h"
+#include "queue.h"
 #include "util.h"
 
 
@@ -159,6 +161,21 @@ int connectto(const char *host, const char *port) {
 }
 
 
+queue *task_queue = NULL;
+
+static void *readtask(void *args) {
+    int fd = -1;
+    while(1) {
+        struct task* tmp = (task_t *) dequeue(task_queue);
+        fd = tmp->data.fd;
+        free(tmp);
+        command_handler(fd, 0);
+    }
+
+    return NULL;
+}
+
+
 /*
  * Start an event loop waiting for incoming events on fd
  */
@@ -169,6 +186,16 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
         fprintf(stderr, "Descriptor number must be at least 2\n");
         exit(EXIT_FAILURE);
     }
+
+    task_t *new_task = NULL;
+    task_queue = create_queue();
+
+    // read thread pool
+    pthread_t read_pool[4];
+
+    // threads for reading thread pool
+    for (int i = 0; i < 4; ++i)
+        pthread_create(&read_pool[i], NULL, readtask, NULL);
 
     struct sockaddr addr;
     socklen_t addrlen = sizeof addr;
@@ -213,68 +240,16 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 if (instance.evs[i].data.fd == fds[0])
                     LOG(DEBUG, "Client connected\r\n");
 
-                if (instance.evs[i].data.fd == fds[1]) {
-                    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-                    // add to members
-                    if((getnameinfo(&addr, addrlen,
-                                    hbuf, sizeof hbuf,
-                                    sbuf, sizeof sbuf,
-                                    NI_NUMERICHOST | NI_NUMERICSERV)) == 0)
-                        LOG(DEBUG, "Connection request from node %s:%s\r\n", hbuf, sbuf);
-                    /* create a new cluster node */
-                    cluster_node *new_node = shb_malloc(sizeof(cluster_node));
-                    new_node->addr = hbuf;
-                    new_node->port = GETINT(sbuf);
-                    /* new_node->name = node_name(64); */
-
-                    if (cluster_contained(new_node) == 0) {
-                        new_node->fd = client;
-                        new_node->state = REACHABLE;
-                        new_node->self = 0;
-                        /* add it to the cluster node list if not present*/
-                        instance.ingoing =
-                            list_head_insert(instance.ingoing, new_node);
-                        /* instance.cluster = */
-                        /*     list_head_insert(instance.cluster, new_node); */
-                    } else if (cluster_reachable(new_node) == 0) {
-                        /* set the node already present to state REACHABLE */
-                        if (cluster_set_state(new_node, REACHABLE) == 0)
-                            LOG(DEBUG, "[!] Failed to set node located at %s:%s to state REACHABLE",
-                                    hbuf, sbuf);
-                        else LOG(DEBUG, "Node %s:%s is now REACHABLE\n", hbuf, sbuf);
-                    } else free(new_node); // the node is already present and REACHABLE
-                }
             } else {
                 /*
                  * There's some data to be processed wait unitil lock is
                  * released
                  */
                 if (instance.lock == 0) {
-                    /* if cluster mode is enabled */
-                    if (instance.cluster_mode == 1) {
-                        /* check if the fd is contained in the cluster members */
-                        if (cluster_fd_contained(instance.evs[i].data.fd) == 1) {
-                            /* it's a message from a peer node */
-                            done = (*handler_ptr)(instance.evs[i].data.fd, 1);
-                        } else {
-                            /* it's a message from a connected client */
-                            done = (*handler_ptr)(instance.evs[i].data.fd, 0);
-                            if (done == END) {
-                                /* close the connection */
-                                LOG(DEBUG, "Closing connection request\n");
-                                close(instance.evs[i].data.fd);
-                                break;
-                            }
-                        }
-                    } else {
-                        /* cluster mode is not enabled, i.e. single node instance */
-                        done = (*handler_ptr)(instance.evs[i].data.fd, 0);
-                        if (done == END) {
-                            /* close the connection */
-                            close(instance.evs[i].data.fd);
-                            break;
-                        }
-                    }
+                    new_task = malloc(sizeof(struct task));
+                    new_task->data.fd = instance.evs[i].data.fd;
+                    new_task->next = NULL;
+                    enqueue(task_queue, new_task);
                 }
             }
         }

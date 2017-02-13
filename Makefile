@@ -9,6 +9,7 @@ SRC=src/map.c 			\
 	src/serializer.c 	\
 	src/hashing.h 		\
 	src/cluster.c 		\
+	src/queue.c			\
 	src/list.c
 
 memento: $(SRC)

@@ -22,9 +22,11 @@
 #ifndef NETWORKING_H
 #define NETWORKING_H
 
-#include "map.h"
 
-#define MAX_EVENTS (1024)
+#include <sys/epoll.h>
+
+
+#define MAX_EVENTS (2048)
 #define MAX_DATA_SIZE (10485760)
 
 
@@ -33,6 +35,12 @@
  * be handled
  */
 typedef int (*fd_handler)(int, int);
+
+
+typedef struct task {
+    epoll_data_t data;
+    struct task *next;
+} task_t;
 
 
 int set_nonblocking(int);

@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < thread_nr; ++i) {
         if (pthread_create(&th[i], NULL, make_requests, &conn) < 0)
             perror("pthread");
-        usleep(150);
+        usleep(500);
     }
 
     for (int i = 0; i < thread_nr; ++i)
