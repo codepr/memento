@@ -52,8 +52,10 @@ void release_queue(queue *q) {
 
 /* insert data on the rear item */
 void enqueue(queue *q, void *data) {
+
     pthread_mutex_lock(&(q->w_mutex));
     queue_item *new_item = malloc(sizeof(queue_item));
+
     new_item->next = NULL;
     new_item->data = data;
     q->len++;
@@ -73,30 +75,32 @@ void enqueue(queue *q, void *data) {
 
 /* remove data from the front item and deallocate it */
 void *dequeue(queue* q) {
+
     pthread_mutex_lock(&(q->w_mutex));
 
     while (q->len == 0)
         pthread_cond_wait(&(q->w_cond), &(q->w_mutex));
 
-    queue_item *del_item;
-    void *item;
+    void *item = NULL;
+    if (q->len > 0) {
+        queue_item *del_item;
 
-    if(q->front == NULL && q->rear == NULL) {
-        perror("Queue is empty");
-        item = NULL;
-    }
-    else {
+        /* if(q->front == NULL && q->rear == NULL) { */
+        /*     perror("Queue is empty"); */
+        /*     item = NULL; */
+        /* } */
+        /* else { */
         del_item = q->front;
         q->front = q->front->next;
         if(!q->front) {
             q->rear = NULL;
         }
         item = del_item->data;
-        if (del_item) {
+        if (del_item)
             free(del_item);
-        }
         q->len--;
     }
+
     pthread_mutex_unlock(&(q->w_mutex));
     return item;
 }

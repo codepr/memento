@@ -79,12 +79,17 @@ static int create_and_bind(const char *host, const char *port) {
 
         if (sfd == -1) continue;
 
-        if ((bind(sfd, rp->ai_addr, rp->ai_addrlen)) == 0)
+        if ((bind(sfd, rp->ai_addr, rp->ai_addrlen)) == 0) {
+            /* set SO_REUSEADDR so the socket will be reusable after process kill */
+            if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
+                perror("SO_REUSEADDR");
             /* We managed to bind successfully! */
             break;
+        }
 
         close(sfd);
     }
+
 
     if (rp == NULL) {
         perror("Could not bind");
@@ -161,17 +166,83 @@ int connectto(const char *host, const char *port) {
 }
 
 
-queue *task_queue = NULL;
+pthread_mutex_t r_mutex;
+/* pthread_mutex_t w_mutex; */
+/* pthread_cond_t r_cond; */
+/* pthread_cond_t w_cond; */
 
-static void *readtask(void *args) {
-    int fd = -1;
-    while(1) {
-        struct task* tmp = (task_t *) dequeue(task_queue);
-        fd = tmp->data.fd;
-        free(tmp);
-        command_handler(fd, 0);
+
+queue *connections_queue = NULL;
+
+struct worker_epoll {
+    int efd;
+    struct epoll_event event;
+    struct epoll_event *events;
+};
+
+
+/* static void *connector(void *args) { */
+/*  */
+/*     struct worker_epoll *wep = (struct worker_epoll *) args; */
+/*  */
+/*     while(1) { */
+/*  */
+/*         #<{(| get descriptor if any |)}># */
+/*         int descriptor = *(int *) dequeue(connections_queue); */
+/*  */
+/*  */
+/*         wep->event.events = EPOLLIN | EPOLLET; */
+/*         wep->event.data.fd = descriptor; */
+/*  */
+/*         if (epoll_ctl(wep->efd, EPOLL_CTL_ADD, descriptor, &wep->event) == -1) { */
+/*             perror("epoll_ctl: client connection"); */
+/*         } */
+/*     } */
+/*     return NULL; */
+/* } */
+
+
+static void *worker(void *args) {
+
+    struct worker_epoll *wep = (struct worker_epoll *) args;
+    int nfds, done;
+
+    while (1) {
+
+        if ((nfds = epoll_wait(wep->efd, wep->events, MAX_EVENTS, -1)) == -1) {
+            perror("epoll_wait");
+            exit(EXIT_FAILURE);
+        }
+
+        for (int i = 0; i < nfds; ++i) {
+
+            if (wep->events[i].events & EPOLLIN) {
+                /*
+                 * There's some data to be processed wait unitil lock is
+                 * released
+                 */
+                if (wep->events[i].data.fd < 0)
+                    continue;
+
+                if (instance.cluster_mode == 1) {
+                    /* check if the fd is contained in the cluster members */
+                    if (cluster_fd_contained(wep->events[i].data.fd) == 1) {
+                        /* it's a message from a peer node */
+                        done = command_handler(wep->events[i].data.fd, 1);
+                    } else {
+                        /* it's a message from a connected client */
+                        done = command_handler(wep->events[i].data.fd, 0);
+                    }
+
+                } else done = command_handler(wep->events[i].data.fd, 0);
+                if (done == END || done == 1) {
+                    /* close the connection */
+                    LOG(DEBUG, "Closing connection\n");
+                    close(wep->events[i].data.fd);
+                }
+            }
+        }
     }
-
     return NULL;
 }
 
@@ -187,41 +258,72 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
         exit(EXIT_FAILURE);
     }
 
-    task_t *new_task = NULL;
-    task_queue = create_queue();
-
-    // read thread pool
-    pthread_t read_pool[4];
-
-    // threads for reading thread pool
-    for (int i = 0; i < 4; ++i)
-        pthread_create(&read_pool[i], NULL, readtask, NULL);
-
+    int client;
     struct sockaddr addr;
     socklen_t addrlen = sizeof addr;
-    int nfds, client, done = 0;
+    list *ep_list = list_create();
+
+    connections_queue = create_queue();
+
+    int poolnr = 8;
+    // worker thread pool
+    pthread_t workers[poolnr];
+    /* pthread_t connectors[poolnr]; */
+
+    // I/0 thread pool start
+    for (int i = 0; i < poolnr; ++i) {
+        struct epoll_event event;
+        struct epoll_event *events = calloc(MAX_EVENTS, sizeof(*events));
+        int efd = epoll_create1(0);
+        event.events = EPOLLIN | EPOLLET;
+        struct worker_epoll *wp = calloc(1, sizeof(*wp));
+        wp->efd = efd;
+        wp->event = event;
+        wp->events = events;
+        list_head_insert(ep_list, wp);
+        /* pthread_create(&connectors[i], NULL, connector, wp); */
+        pthread_create(&workers[i], NULL, worker, wp);
+    }
+
+    int nfds;
 
     for (int n = 0; n < len; ++n) {
         instance.ev.data.fd = fds[n];
-        if(epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, fds[n], &instance.ev) == -1) {
+        instance.ev.events = EPOLLIN | EPOLLET;
+        if(epoll_ctl(instance.epollfd,
+                    EPOLL_CTL_ADD, fds[n], &instance.ev) == -1) {
             perror("epoll_ctl");
             exit(EXIT_FAILURE);
         }
     }
 
+    list_node *cursor = ep_list->head;
+    struct worker_epoll *wep = NULL;
+
     while(1) {
 
-        if ((nfds = epoll_wait(instance.epollfd, instance.evs, MAX_EVENTS, -1)) == -1) {
+        if (cursor == NULL) cursor = ep_list->head;
+
+        if ((nfds = epoll_wait(instance.epollfd,
+                        instance.evs, MAX_EVENTS, -1)) == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
         }
 
         for (int i = 0; i < nfds; ++i) {
+
+            if ((instance.evs[i].events & EPOLLERR) ||
+                    (instance.evs[i].events & EPOLLHUP)) {
+                /* An error has occured on this fd, or the socket is not
+                   ready for reading */
+                perror ("epoll error");
+                close (instance.evs[i].data.fd);
+                continue;
+            }
             /* If fdescriptor is main server or bus server*/
             if (instance.evs[i].data.fd == fds[0]
                     || instance.evs[i].data.fd == fds[1]) {
 
-                /* connection request incoming */
 
                 if ((client = accept(instance.evs[i].data.fd,
                                 (struct sockaddr *) &addr, &addrlen)) == -1) {
@@ -230,30 +332,57 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 }
 
                 set_nonblocking(client);
-                instance.ev.events = EPOLLIN | EPOLLET;
-                instance.ev.data.fd = client;
-                if (epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, client, &instance.ev) == -1) {
+
+                /* enqueue(connections_queue, &client); */
+
+                wep = (struct worker_epoll *) cursor->data;
+
+                wep->event.events = EPOLLIN | EPOLLET;
+                wep->event.data.fd = client;
+
+                if (epoll_ctl(wep->efd, EPOLL_CTL_ADD, client, &wep->event) == -1) {
                     perror("epoll_ctl: client connection");
-                    exit(EXIT_FAILURE);
                 }
 
+                cursor = cursor->next;
+
+                if (instance.evs[i].data.fd == fds[1]) {
+                    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+                    /* create a new cluster node */
+                    cluster_node *new_node = shb_malloc(sizeof(cluster_node));
+                    new_node->addr = hbuf;
+                    new_node->port = GETINT(sbuf);
+                    /* new_node->name = node_name(64); */
+
+                    if (cluster_contained(new_node) == 0) {
+                        new_node->fd = client;
+                        new_node->state = REACHABLE;
+                        new_node->self = 0;
+                        /* add it to the cluster node list if not present*/
+                        instance.ingoing =
+                            list_head_insert(instance.ingoing, new_node);
+                        /* instance.cluster = */
+                        /*     list_head_insert(instance.cluster, new_node); */
+                    } else if (cluster_reachable(new_node) == 0) {
+                        /* set the node already present to state REACHABLE */
+                        if (cluster_set_state(new_node, REACHABLE) == 0)
+                            LOG(DEBUG, "[!] Failed to set node located at %s:%s to state REACHABLE",
+                                    hbuf, sbuf);
+                        else LOG(DEBUG, "Node %s:%s is now REACHABLE\n", hbuf, sbuf);
+                    } else free(new_node); // the node is already present and REACHABLE
+
+                }
                 if (instance.evs[i].data.fd == fds[0])
                     LOG(DEBUG, "Client connected\r\n");
 
-            } else {
-                /*
-                 * There's some data to be processed wait unitil lock is
-                 * released
-                 */
-                if (instance.lock == 0) {
-                    new_task = malloc(sizeof(struct task));
-                    new_task->data.fd = instance.evs[i].data.fd;
-                    new_task->next = NULL;
-                    enqueue(task_queue, new_task);
-                }
             }
         }
     }
     return 0;
 }
 
+
+void add_epollout_event(int sfd, char *data, unsigned long datalen, unsigned int from_peer) {
+    if (send(sfd, data, datalen, 0) < 0)
+        perror("Send data failed");
+}

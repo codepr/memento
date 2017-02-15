@@ -26,7 +26,7 @@
 #include <sys/epoll.h>
 
 
-#define MAX_EVENTS (2048)
+#define MAX_EVENTS (64)
 #define MAX_DATA_SIZE (10485760)
 
 
@@ -39,13 +39,21 @@ typedef int (*fd_handler)(int, int);
 
 typedef struct task {
     epoll_data_t data;
-    struct task *next;
 } task_t;
+
+
+typedef struct userdata {
+    int fd;
+    unsigned int size;        // real received data size
+    char *data;
+    unsigned int from_peer : 1;
+} userdata_t;
 
 
 int set_nonblocking(int);
 int listento(const char *, const char *);
 int connectto(const char *, const char *);
 int event_loop(int *, size_t, fd_handler);
+void add_epollout_event(int, char *, unsigned long, unsigned int);
 
 #endif
