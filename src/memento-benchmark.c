@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
 
     char *host = "127.0.0.1";
     char *port = "8082";
-    int thread_nr = 150;
+    int thread_nr = 50;
     pthread_t th[thread_nr];
 
     if (argc > 2) {
