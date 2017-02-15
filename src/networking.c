@@ -173,6 +173,7 @@ pthread_mutex_t r_mutex;
 
 
 queue *connections_queue = NULL;
+queue *outqueue = NULL;
 
 struct worker_epoll {
     int efd;
@@ -247,6 +248,25 @@ static void *worker(void *args) {
 }
 
 
+static void *writer(void *args) {
+
+    userdata_t *udata = NULL;
+
+    while(1) {
+
+        udata = (userdata_t *) dequeue(outqueue);
+
+        if (send(udata->fd, udata->data, udata->size, 0) < 0)
+            perror("Send data failed");
+
+        free(udata);
+
+    }
+
+    return NULL;
+}
+
+
 /*
  * Start an event loop waiting for incoming events on fd
  */
@@ -264,11 +284,12 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
     list *ep_list = list_create();
 
     connections_queue = create_queue();
+    outqueue = create_queue();
 
-    int poolnr = 8;
+    int poolnr = 4;
     // worker thread pool
     pthread_t workers[poolnr];
-    /* pthread_t connectors[poolnr]; */
+    pthread_t writers[poolnr];
 
     // I/0 thread pool start
     for (int i = 0; i < poolnr; ++i) {
@@ -281,7 +302,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
         wp->event = event;
         wp->events = events;
         list_head_insert(ep_list, wp);
-        /* pthread_create(&connectors[i], NULL, connector, wp); */
+        pthread_create(&writers[i], NULL, writer, NULL);
         pthread_create(&workers[i], NULL, worker, wp);
     }
 
@@ -375,6 +396,31 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 if (instance.evs[i].data.fd == fds[0])
                     LOG(DEBUG, "Client connected\r\n");
 
+            } else if (instance.evs[i].events & EPOLLIN) {
+
+                /* There's some data from peer nodes to be processed wait unitil
+                   lock is released */
+
+                int done = 0;
+                if (instance.lock == 0) {
+                    /* if cluster mode is enabled */
+                    if (instance.cluster_mode == 1) {
+                        /* check if the fd is contained in the cluster members */
+                        if (cluster_fd_contained(instance.evs[i].data.fd) == 1) {
+                            /* it's a message from a peer node */
+                            done = (*handler_ptr)(instance.evs[i].data.fd, 1);
+                        } else {
+                            /* it's a message from a connected client */
+                            done = (*handler_ptr)(instance.evs[i].data.fd, 0);
+                            if (done == END) {
+                                /* close the connection */
+                                LOG(DEBUG, "Closing connection request\n");
+                                close(instance.evs[i].data.fd);
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -383,6 +429,12 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
 
 void add_epollout_event(int sfd, char *data, unsigned long datalen, unsigned int from_peer) {
-    if (send(sfd, data, datalen, 0) < 0)
-        perror("Send data failed");
+    /* if (send(sfd, data, datalen, 0) < 0) */
+    /*     perror("Send data failed"); */
+    userdata_t *udata = calloc(1, sizeof(*udata));
+    udata->fd = sfd;
+    udata->data = data;
+    udata->size = datalen;
+    udata->from_peer = from_peer;
+    enqueue(outqueue, udata);
 }
