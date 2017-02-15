@@ -155,13 +155,13 @@ static int hash(char *key) {
 static int answer(int fd, int resp) {
     switch (resp) {
         case MAP_OK:
-            add_epollout_event(fd, S_OK, sizeof(S_OK), 0);
+            schedule_write(fd, S_OK, sizeof(S_OK));
             break;
         case MAP_ERR:
-            add_epollout_event(fd, S_NIL, sizeof(S_NIL), 0);
+            schedule_write(fd, S_NIL, sizeof(S_NIL));
             break;
         case COMMAND_NOT_FOUND:
-            add_epollout_event(fd, S_UNK, sizeof(S_UNK), 0);
+            schedule_write(fd, S_UNK, sizeof(S_UNK));
             break;
         case END:
             return END;
@@ -197,7 +197,7 @@ static void route_command(int idx, int fd, char *b, struct message *msg) {
                 msg->fd = fd;
                 msg->from_peer = 0;
                 char *payload = serialize(*msg);
-                add_epollout_event(n->fd, payload, strlen(b) + S_OFFSET, 0);
+                schedule_write(n->fd, payload, strlen(b) + S_OFFSET);
                 free(payload);
                 LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
                 break;
@@ -236,6 +236,7 @@ int command_handler(int fd, int from_peer) {
              */
             if (from_peer == 1) {
 
+                /* LOG(DEBUG, "Received data from peer node, testing pre deserialization: %s\n", buf); */
                 /* message came from a peer node, so it is serialized */
                 struct message m = deserialize(buf); // deserialize into message structure
                 LOG(DEBUG, "Received data from peer node, message: %s\n", m.content);
@@ -246,14 +247,14 @@ int command_handler(int fd, int from_peer) {
 
                     /* answer to the original client */
                     if (strcmp(m.content, S_OK) == 0)
-                        add_epollout_event(m.fd, S_OK, strlen(S_OK), 0);
+                        schedule_write(m.fd, S_OK, strlen(S_OK));
                     else if (strcmp(m.content, S_NIL) == 0)
-                        add_epollout_event(m.fd, S_NIL, strlen(S_NIL), 0);
+                        schedule_write(m.fd, S_NIL, strlen(S_NIL));
                     else if (strcmp(m.content, S_UNK) == 0)
-                        add_epollout_event(m.fd, S_UNK, strlen(S_UNK), 0);
+                        schedule_write(m.fd, S_UNK, strlen(S_UNK));
                 } else if (m.from_peer == 1) {
                     /* answer to a query operations to the original client */
-                    add_epollout_event(m.fd, m.content, strlen(m.content), 0);
+                    schedule_write(m.fd, m.content, strlen(m.content));
 
                 } else {
                     /* message from another node */
@@ -287,9 +288,9 @@ int command_handler(int fd, int from_peer) {
                         default:
                             break;
                     }
-                    add_epollout_event(fd, payload, len, 0);
+                    schedule_write(fd, payload, len);
                     LOG(DEBUG, "Response to peer node\n");
-                    if (payload) free(payload);
+                    /* if (payload) free(payload); */
                 }
             } else {
                 /* check the if the command is genuine */
@@ -336,8 +337,8 @@ int command_handler(int fd, int from_peer) {
                                 msg.fd = fd;
                                 msg.from_peer = 0;
                                 char *payload = serialize(msg);
-                                add_epollout_event(n->fd, payload, strlen(b) + S_OFFSET, 0);
-                                free(payload);
+                                schedule_write(n->fd, payload, strlen(b) + S_OFFSET);
+                                /* free(payload); */
                                 LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
                             }
                             cursor = cursor->next;
@@ -354,7 +355,7 @@ int command_handler(int fd, int from_peer) {
                     /* command received is not recognized or is a quit command */
                     switch (check) {
                         case COMMAND_NOT_FOUND:
-                            add_epollout_event(fd, S_UNK, strlen(S_UNK), 0);
+                            schedule_write(fd, S_UNK, strlen(S_UNK));
                             break;
                         case END:
                             ret = END;
@@ -475,7 +476,7 @@ static int print_keys(void *t1, void *t2) {
     char *stringkey = calloc(strlen(kv->key) + 1, sizeof(*stringkey));
     strcpy(stringkey, kv->key);
     char *key_nl = append_string(stringkey, "\n");
-    add_epollout_event(*fd, key_nl, strlen(key_nl), 0);
+    schedule_write(*fd, key_nl, strlen(key_nl));
     /* free(key_nl); */
     /* free(stringkey); */
     return MAP_OK;
@@ -495,8 +496,8 @@ static int cluster_print_keys(void *t1, void *t2, void *t3) {
     key[strlen((char *) entry->key) + 2] = '\0';
     msg.content = key;
     char *payload = serialize(msg);
-    add_epollout_event(*sfd, payload, strlen(entry->key) + 2 + S_OFFSET, 1);
-    free(payload);
+    schedule_write(*sfd, payload, strlen(entry->key) + 2 + S_OFFSET);
+    /* free(payload); */
     return MAP_OK;
 }
 
@@ -505,7 +506,7 @@ static int cluster_print_keys(void *t1, void *t2, void *t3) {
 static int print_values(void *t1, void *t2) {
     map_entry *entry = (map_entry *) t2;
     int *fd = (int *) t1;
-    add_epollout_event(*fd, entry->val, strlen(entry->val), 0);
+    schedule_write(*fd, entry->val, strlen(entry->val));
     return MAP_OK;
 }
 
@@ -522,8 +523,8 @@ static int cluster_print_values(void *t1, void *t2, void *t3) {
     snprintf(val, strlen((char *) entry->val) + 1, "%s\n", (char *) entry->val);
     msg.content = val;
     char *payload = serialize(msg);
-    add_epollout_event(*sfd, payload, strlen(entry->val) + 2 + S_OFFSET, 1);
-    free(payload);
+    schedule_write(*sfd, payload, strlen(entry->val) + 2 + S_OFFSET);
+    /* free(payload); */
     return MAP_OK;
 }
 
@@ -574,10 +575,10 @@ int get_command(char *command, int sfd, int rfd, unsigned int from_peer) {
                     m.fd = rfd;
                     m.from_peer = 1;
                     char *payload = serialize(m);
-                    add_epollout_event(sfd, payload, strlen(response) + S_OFFSET, 1);
-                    free(payload);
+                    schedule_write(sfd, payload, strlen(response) + S_OFFSET);
+                    /* free(payload); */
                 } else {
-                    add_epollout_event(sfd, val, strlen((char *) val), 0);
+                    schedule_write(sfd, val, strlen((char *) val));
                 }
                 ret = 1;
             }
@@ -628,12 +629,12 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
                     m.fd = rfd;
                     m.from_peer = 1;
                     char *payload = serialize(m);
-                    add_epollout_event(sfd, payload, strlen(response) + S_OFFSET, 1);
-                    free(payload);
+                    schedule_write(sfd, payload, strlen(response) + S_OFFSET);
+                    /* free(payload); */
                 } else {
-                    add_epollout_event(sfd, kvstring, kvstrsize, 0);
+                    schedule_write(sfd, kvstring, kvstrsize);
                 }
-                free(kvstring);
+                /* free(kvstring); */
                 ret = 1;
             }
         }
@@ -822,13 +823,14 @@ int count_command(int sfd, int rfd, unsigned int from_peer) {
             msg.fd = rfd;
             msg.from_peer = 1;
             char response[strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9];
+            memset(response, 0x00, strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9);
             sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, c_len);
             msg.content = response;
             char *payload = serialize(msg);
-            add_epollout_event(sfd, payload, strlen(response) + S_OFFSET, 1);
-            free(payload);
+            schedule_write(sfd, payload, strlen(response) + S_OFFSET);
+            /* free(payload); */
         } else {
-            add_epollout_event(sfd, c_len, 16, 0);
+            schedule_write(sfd, c_len, 16);
         }
     }
     return 1;
@@ -984,10 +986,10 @@ int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
                     msg.content = ttl;
                     msg.from_peer = 1;
                     char *payload = serialize(msg);
-                    add_epollout_event(sfd, payload, strlen(ttl) + S_OFFSET, 1);
-                    free(payload);
+                    schedule_write(sfd, payload, strlen(ttl) + S_OFFSET);
+                    /* free(payload); */
                 } else {
-                    add_epollout_event(sfd, ttl, 7, 0);
+                    schedule_write(sfd, ttl, 7);
                 }
             }
         } else return MAP_ERR;
@@ -1030,6 +1032,6 @@ static void get_clusterinfo(int sfd) {
             pos += size;
             cursor = cursor->next;
         }
-        add_epollout_event(sfd, info, pos, 0);
+        schedule_write(sfd, info, pos);
     }
 }

@@ -46,14 +46,21 @@ typedef struct userdata {
     int fd;
     unsigned int size;        // real received data size
     char *data;
-    unsigned int from_peer : 1;
 } userdata_t;
+
+
+struct worker_epoll {
+    int efd;
+    struct epoll_event event;
+    struct epoll_event *events;
+};
+
 
 
 int set_nonblocking(int);
 int listento(const char *, const char *);
 int connectto(const char *, const char *);
 int event_loop(int *, size_t, fd_handler);
-void add_epollout_event(int, char *, unsigned long, unsigned int);
+void schedule_write(int, char *, unsigned long);
 
 #endif

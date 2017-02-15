@@ -43,6 +43,7 @@ int cluster_init(int distributed, const char *id, const char *host, const char *
     instance.store = map_create();
     instance.cluster = list_create();
     instance.ingoing = list_create();
+    instance.write_queue = create_queue();
     instance.log_level = DEBUG;
 
     /* initialized global epollfd */

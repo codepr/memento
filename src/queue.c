@@ -82,24 +82,15 @@ void *dequeue(queue* q) {
         pthread_cond_wait(&(q->w_cond), &(q->w_mutex));
 
     void *item = NULL;
-    if (q->len > 0) {
-        queue_item *del_item;
-
-        /* if(q->front == NULL && q->rear == NULL) { */
-        /*     perror("Queue is empty"); */
-        /*     item = NULL; */
-        /* } */
-        /* else { */
-        del_item = q->front;
-        q->front = q->front->next;
-        if(!q->front) {
-            q->rear = NULL;
-        }
-        item = del_item->data;
-        if (del_item)
-            free(del_item);
-        q->len--;
-    }
+    queue_item *del_item;
+    del_item = q->front;
+    q->front = q->front->next;
+    if(!q->front)
+        q->rear = NULL;
+    item = del_item->data;
+    if (del_item)
+        free(del_item);
+    q->len--;
 
     pthread_mutex_unlock(&(q->w_mutex));
     return item;

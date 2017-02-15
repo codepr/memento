@@ -31,7 +31,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-/* #include <sys/epoll.h> */
 #include <arpa/inet.h>
 #include "networking.h"
 #include "serializer.h"
@@ -41,7 +40,7 @@
 #include "util.h"
 
 
-/* set non-blocking socket */
+/* Set non-blocking socket */
 int set_nonblocking(int fd) {
     int flags, result;
     flags = fcntl(fd, F_GETFL, 0);
@@ -58,7 +57,7 @@ int set_nonblocking(int fd) {
 }
 
 
-// auxiliary function for creating epoll server
+/* Auxiliary function for creating epoll server */
 static int create_and_bind(const char *host, const char *port) {
     struct addrinfo hints;
     struct addrinfo *result, *rp;
@@ -81,9 +80,10 @@ static int create_and_bind(const char *host, const char *port) {
 
         if ((bind(sfd, rp->ai_addr, rp->ai_addrlen)) == 0) {
             /* set SO_REUSEADDR so the socket will be reusable after process kill */
-            if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
+            if (setsockopt(sfd, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR),
+                        &(int){ 1 }, sizeof(int)) < 0)
                 perror("SO_REUSEADDR");
-            /* We managed to bind successfully! */
+            /* Succesful bind */
             break;
         }
 
@@ -103,7 +103,8 @@ static int create_and_bind(const char *host, const char *port) {
 
 
 /*
- * Start listening on the specfied address and port
+ * Create a non-blocking socket and make it listen on the specfied address and
+ * port
  */
 int listento(const char *host, const char *port) {
     int sfd;
@@ -128,7 +129,7 @@ int listento(const char *host, const char *port) {
 
 
 /*
- * Start a connection to the specified host and port
+ * Create a socket and use it to connect to the specified host and port
  */
 int connectto(const char *host, const char *port) {
 
@@ -162,48 +163,19 @@ int connectto(const char *host, const char *port) {
         return -1;
     }
 
+    /* set_nonblocking(sfd); */
+
     return sfd;
 }
 
 
-pthread_mutex_t r_mutex;
-/* pthread_mutex_t w_mutex; */
-/* pthread_cond_t r_cond; */
-/* pthread_cond_t w_cond; */
 
 
-queue *connections_queue = NULL;
-queue *outqueue = NULL;
-
-struct worker_epoll {
-    int efd;
-    struct epoll_event event;
-    struct epoll_event *events;
-};
-
-
-/* static void *connector(void *args) { */
-/*  */
-/*     struct worker_epoll *wep = (struct worker_epoll *) args; */
-/*  */
-/*     while(1) { */
-/*  */
-/*         #<{(| get descriptor if any |)}># */
-/*         int descriptor = *(int *) dequeue(connections_queue); */
-/*  */
-/*  */
-/*         wep->event.events = EPOLLIN | EPOLLET; */
-/*         wep->event.data.fd = descriptor; */
-/*  */
-/*         if (epoll_ctl(wep->efd, EPOLL_CTL_ADD, descriptor, &wep->event) == -1) { */
-/*             perror("epoll_ctl: client connection"); */
-/*         } */
-/*     } */
-/*     return NULL; */
-/* } */
-
-
-static void *worker(void *args) {
+/*
+ * Basic reader worker function, it's responsibility is to start his own event
+ * loop and wait for events EPOLLIN on monitored descriptors
+ */
+static void *reader_worker(void *args) {
 
     struct worker_epoll *wep = (struct worker_epoll *) args;
     int nfds, done;
@@ -218,24 +190,10 @@ static void *worker(void *args) {
         for (int i = 0; i < nfds; ++i) {
 
             if (wep->events[i].events & EPOLLIN) {
-                /*
-                 * There's some data to be processed wait unitil lock is
-                 * released
-                 */
+                /* There's some data to be processed */
                 if (wep->events[i].data.fd < 0)
                     continue;
-
-                if (instance.cluster_mode == 1) {
-                    /* check if the fd is contained in the cluster members */
-                    if (cluster_fd_contained(wep->events[i].data.fd) == 1) {
-                        /* it's a message from a peer node */
-                        done = command_handler(wep->events[i].data.fd, 1);
-                    } else {
-                        /* it's a message from a connected client */
-                        done = command_handler(wep->events[i].data.fd, 0);
-                    }
-
-                } else done = command_handler(wep->events[i].data.fd, 0);
+                done = command_handler(wep->events[i].data.fd, 0);
                 if (done == END || done == 1) {
                     /* close the connection */
                     LOG(DEBUG, "Closing connection\n");
@@ -248,19 +206,23 @@ static void *worker(void *args) {
 }
 
 
-static void *writer(void *args) {
+/*
+ * Basic writer worker function, it's responsibility is to poll data from the
+ * write queue for write scheduled data and send it out, releasing the
+ * allocated memory
+ */
+static void *writer_worker(void *args) {
 
     userdata_t *udata = NULL;
 
     while(1) {
 
-        udata = (userdata_t *) dequeue(outqueue);
+        udata = (userdata_t *) dequeue(instance.write_queue);
 
         if (send(udata->fd, udata->data, udata->size, 0) < 0)
             perror("Send data failed");
 
         free(udata);
-
     }
 
     return NULL;
@@ -268,7 +230,11 @@ static void *writer(void *args) {
 
 
 /*
- * Start an event loop waiting for incoming events on fd
+ * Main event loop thread, awaits for incoming connections using the global
+ * epoll instance, his main responsibility is to pass incoming client
+ * connections descriptor to a worker thread according to a simple round robin
+ * scheduling, other than this, it is the sole responsible of the communication
+ * between nodes if the system is started in cluster mode.
  */
 int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
@@ -283,15 +249,18 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
     socklen_t addrlen = sizeof addr;
     list *ep_list = list_create();
 
-    connections_queue = create_queue();
-    outqueue = create_queue();
-
-    int poolnr = 4;
-    // worker thread pool
-    pthread_t workers[poolnr];
+    /* Number of worker and writer threads to create, should be tweaked basing
+       on the number of the physical cores provided by the CPU */
+    int poolnr = 2;
+    /* worker thread pool */
+    pthread_t readers[poolnr];
     pthread_t writers[poolnr];
 
-    // I/0 thread pool start
+    /* I/0 thread pool initialization, allocating a worker_epool structure for
+       each one. A worker_epool structure is formed of an epoll descriptor and
+       his event queue. Every  worker_epoll is added to a list, in order to
+       reuse them in the event loop to add connecting descriptors in a round
+       robin scheduling */
     for (int i = 0; i < poolnr; ++i) {
         struct epoll_event event;
         struct epoll_event *events = calloc(MAX_EVENTS, sizeof(*events));
@@ -302,12 +271,15 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
         wp->event = event;
         wp->events = events;
         list_head_insert(ep_list, wp);
-        pthread_create(&writers[i], NULL, writer, NULL);
-        pthread_create(&workers[i], NULL, worker, wp);
+        pthread_create(&writers[i], NULL, writer_worker, NULL);
+        pthread_create(&readers[i], NULL, reader_worker, wp);
     }
 
     int nfds;
 
+    /* Add two already listening nonblocking descriptors to the loop, the first
+       one represent the main point of access for clients, the second one is
+       responsible for the communication between nodes (bus) */
     for (int n = 0; n < len; ++n) {
         instance.ev.data.fd = fds[n];
         instance.ev.events = EPOLLIN | EPOLLET;
@@ -321,6 +293,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
     list_node *cursor = ep_list->head;
     struct worker_epoll *wep = NULL;
 
+    /* Start the main event loop, epoll_wait blocks untill an event occur */
     while(1) {
 
         if (cursor == NULL) cursor = ep_list->head;
@@ -341,10 +314,10 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 close (instance.evs[i].data.fd);
                 continue;
             }
-            /* If fdescriptor is main server or bus server*/
+            /* If fdescriptor is main server or bus server add it to worker
+               threads or to the global epoll instance respectively */
             if (instance.evs[i].data.fd == fds[0]
                     || instance.evs[i].data.fd == fds[1]) {
-
 
                 if ((client = accept(instance.evs[i].data.fd,
                                 (struct sockaddr *) &addr, &addrlen)) == -1) {
@@ -354,20 +327,37 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
                 set_nonblocking(client);
 
-                /* enqueue(connections_queue, &client); */
+                /* Client connection check, this case must add the descriptor
+                   to the next worker thread in the list */
+                if (instance.evs[i].data.fd == fds[0]) {
+                    wep = (struct worker_epoll *) cursor->data;
 
-                wep = (struct worker_epoll *) cursor->data;
+                    wep->event.events = EPOLLIN | EPOLLET;
+                    wep->event.data.fd = client;
 
-                wep->event.events = EPOLLIN | EPOLLET;
-                wep->event.data.fd = client;
+                    if (epoll_ctl(wep->efd, EPOLL_CTL_ADD, client, &wep->event) == -1) {
+                        perror("epoll_ctl: client connection");
+                    }
 
-                if (epoll_ctl(wep->efd, EPOLL_CTL_ADD, client, &wep->event) == -1) {
-                    perror("epoll_ctl: client connection");
+                    cursor = cursor->next; /* round-robin like distribution */
+
+                    LOG(DEBUG, "Client connected\r\n");
                 }
 
-                cursor = cursor->next;
-
+                /* Bus connection check, in this case, the descriptor
+                   represents another node connecting, must be added to the
+                   global epoll instance */
                 if (instance.evs[i].data.fd == fds[1]) {
+
+                    instance.ev.events = EPOLLIN | EPOLLET;
+                    instance.ev.data.fd = client;
+
+                    if (epoll_ctl(instance.epollfd,
+                                EPOLL_CTL_ADD, client, &instance.ev) == -1) {
+                        perror("epoll_ctl: client connection");
+                    }
+
+
                     char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
                     /* create a new cluster node */
                     cluster_node *new_node = shb_malloc(sizeof(cluster_node));
@@ -382,8 +372,6 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                         /* add it to the cluster node list if not present*/
                         instance.ingoing =
                             list_head_insert(instance.ingoing, new_node);
-                        /* instance.cluster = */
-                        /*     list_head_insert(instance.cluster, new_node); */
                     } else if (cluster_reachable(new_node) == 0) {
                         /* set the node already present to state REACHABLE */
                         if (cluster_set_state(new_node, REACHABLE) == 0)
@@ -393,32 +381,20 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     } else free(new_node); // the node is already present and REACHABLE
 
                 }
-                if (instance.evs[i].data.fd == fds[0])
-                    LOG(DEBUG, "Client connected\r\n");
-
             } else if (instance.evs[i].events & EPOLLIN) {
 
-                /* There's some data from peer nodes to be processed wait unitil
-                   lock is released */
+                /* There's some data from peer nodes to be processed, check if
+                   the lock is released (i.e. the cluster has succesfully
+                   formerd) and handle incoming messages */
 
                 int done = 0;
                 if (instance.lock == 0) {
-                    /* if cluster mode is enabled */
-                    if (instance.cluster_mode == 1) {
-                        /* check if the fd is contained in the cluster members */
-                        if (cluster_fd_contained(instance.evs[i].data.fd) == 1) {
-                            /* it's a message from a peer node */
-                            done = (*handler_ptr)(instance.evs[i].data.fd, 1);
-                        } else {
-                            /* it's a message from a connected client */
-                            done = (*handler_ptr)(instance.evs[i].data.fd, 0);
-                            if (done == END) {
-                                /* close the connection */
-                                LOG(DEBUG, "Closing connection request\n");
-                                close(instance.evs[i].data.fd);
-                                break;
-                            }
-                        }
+                    done = (*handler_ptr)(instance.evs[i].data.fd, 1);
+                    if (done == END) {
+                        /* close the connection */
+                        LOG(DEBUG, "Closing connection request\n");
+                        close(instance.evs[i].data.fd);
+                        break;
                     }
                 }
             }
@@ -428,13 +404,16 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 }
 
 
-void add_epollout_event(int sfd, char *data, unsigned long datalen, unsigned int from_peer) {
+/*
+ * Add userdata_t structure to the instance.write_queue, a writer worker will handle
+ * it
+ */
+void schedule_write(int sfd, char *data, unsigned long datalen) {
     /* if (send(sfd, data, datalen, 0) < 0) */
     /*     perror("Send data failed"); */
-    userdata_t *udata = calloc(1, sizeof(*udata));
+    userdata_t *udata = calloc(1, sizeof(userdata_t));
     udata->fd = sfd;
     udata->data = data;
     udata->size = datalen;
-    udata->from_peer = from_peer;
-    enqueue(outqueue, udata);
+    enqueue(instance.write_queue, udata);
 }

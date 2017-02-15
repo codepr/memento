@@ -25,6 +25,7 @@
 #include "map.h"
 #include "list.h"
 #include "util.h"
+#include "queue.h"
 #include "networking.h"
 #include <sys/epoll.h>
 
@@ -56,6 +57,7 @@ typedef struct {
     map *store;                         // items of the DB
     list *cluster;                      // map of cluster nodes
     list *ingoing;                      // map of the ingoing connection as backup
+    queue *write_queue;                 // thread-safe queue used to schedule writes on descriptors
     loglevel log_level;                 // log level of the entire system
 } memento;
 
