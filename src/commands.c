@@ -93,31 +93,31 @@ int check_command(char *buffer) {
 
     if (command) {
         // in case of 'QUIT' or 'EXIT' close the connection
-        if (strncasecmp(command, "quit", strlen(command)) == 0
-                || strncasecmp(command, "exit", strlen(command)) == 0)
+        if (strncasecmp(command, "quit", 4) == 0
+                || strncasecmp(command, "exit", 4) == 0)
             return END;
 
         // check if the buffer contains a command and execute it
         for (int i = 0; i < commands_array_len(); i++) {
-            if (strncasecmp(command, commands[i], strlen(command)) == 0) {
+            if (strncasecmp(command, commands[i], strlen(commands[i])) == 0) {
                 return 1;
             }
         }
         // check if the buffer contains a query and execute it
         for (int i = 0; i < queries_array_len(); i++) {
-            if (strncasecmp(command, queries[i], strlen(command)) == 0) {
+            if (strncasecmp(command, queries[i], strlen(queries[i])) == 0) {
                 return 1;
             }
         }
         // check if the buffer contains an enumeration command and execute it
         for (int i = 0; i < enumerates_array_len(); i++) {
-            if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
+            if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0) {
                 return 1;
             }
         }
         // check if the buffer contains a service command and execute it
         for (int i = 0; i < services_array_len(); i++) {
-            if (strncasecmp(command, services[i], strlen(command)) == 0) {
+            if (strncasecmp(command, services[i], strlen(services[i])) == 0) {
                 return 1;
             }
         }
@@ -142,7 +142,7 @@ static int hash(char *key) {
                 strlen(holder), seed) % PARTITIONS;
 
         LOG(DEBUG, "Destination node: %d for key %s\r\n", idx, holder);
-        free(holder);
+        /* free(holder); */
         return idx;
     } else return -1;
 }
@@ -390,32 +390,32 @@ int process_command(char *buffer, int sfd, int rfd, unsigned int from_peer) {
     if (!command)
         return 1;
     // in case of 'QUIT' or 'EXIT' close the connection
-    if (strncasecmp(command, "quit", strlen(command)) == 0
-            || strncasecmp(command, "exit", strlen(command)) == 0)
+    if (strncasecmp(command, "quit", 4) == 0
+            || strncasecmp(command, "exit", 4) == 0)
         return END;
 
     // check if the buffer contains a command and execute it
     for (int i = 0; i < commands_array_len(); i++) {
-        if (strncasecmp(command, commands[i], strlen(command)) == 0) {
+        if (strncasecmp(command, commands[i], strlen(commands[i])) == 0) {
             return (*cmds_func[i])(buffer + strlen(command) + 1);
         }
     }
     // check if the buffer contains a query and execute it
     for (int i = 0; i < queries_array_len(); i++) {
-        if (strncasecmp(command, queries[i], strlen(command)) == 0) {
+        if (strncasecmp(command, queries[i], strlen(queries[i])) == 0) {
             return (*qrs_func[i])(buffer + strlen(command) + 1,
                     sfd, rfd, from_peer);
         }
     }
     // check if the buffer contains an enumeration command and execute it
     for (int i = 0; i < enumerates_array_len(); i++) {
-        if (strncasecmp(command, enumerates[i], strlen(command)) == 0) {
+        if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0) {
             return (*enum_func[i])(sfd, rfd, from_peer);
         }
     }
     // check if the buffer contains a service command and execute it
     for (int i = 0; i < services_array_len(); i++) {
-        if (strncasecmp(command, services[i], strlen(command)) == 0) {
+        if (strncasecmp(command, services[i], strlen(services[i])) == 0) {
             return (*srvs_func[i])();
         }
     }
