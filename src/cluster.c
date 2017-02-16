@@ -271,3 +271,7 @@ void cluster_balance(void) {
     }
 }
 
+
+void cluster_set_selfname(const char *name) {
+    self.name = strdup(name);
+}

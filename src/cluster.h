@@ -78,5 +78,6 @@ int cluster_unreachable_count(void);
 int cluster_set_state(cluster_node *, state);
 int cluster_join(const char *, const char *);
 void cluster_balance(void);
+void cluster_set_selfname(const char *);
 
 #endif

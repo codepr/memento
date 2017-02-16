@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     char *confpath = "/.memento";    // default path for configuration ~/.memento
     char *filename = malloc(strlen(home) + strlen(confpath));
     sprintf(filename, "%s%s", home, confpath);
-    char *id = "A";
+    char *id = NULL;
     int opt, cluster_mode = 0;
     static pthread_t thread;
 
@@ -184,6 +184,7 @@ int main(int argc, char **argv) {
                 /* check if the node is already present */
                 if (cluster_contained(new_node) == 1) {
                     free(new_node);
+                    if (!id) cluster_set_selfname(name);
                     continue;
                 } else {
                     new_node->self = 1;
@@ -191,11 +192,13 @@ int main(int argc, char **argv) {
                 }
             }
             else new_node->self = 0;
+
             new_node->name = name;
 
             /* add the node to the cluster list */
             cluster_add_node(new_node);
 
+            if (!id) cluster_set_selfname(name);
         }
 
         fclose(file);

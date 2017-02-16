@@ -93,31 +93,36 @@ int check_command(char *buffer) {
 
     if (command) {
         // in case of 'QUIT' or 'EXIT' close the connection
-        if (strncasecmp(command, "quit", 4) == 0
-                || strncasecmp(command, "exit", 4) == 0)
+        if (strlen(command) == 4
+                && (strncasecmp(command, "quit", 4) == 0
+                    || strncasecmp(command, "exit", 4) == 0))
             return END;
 
         // check if the buffer contains a command and execute it
         for (int i = 0; i < commands_array_len(); i++) {
-            if (strncasecmp(command, commands[i], strlen(commands[i])) == 0) {
+            if (strncasecmp(command, commands[i], strlen(commands[i])) == 0
+                    && strlen(commands[i]) == strlen(command)) {
                 return 1;
             }
         }
         // check if the buffer contains a query and execute it
         for (int i = 0; i < queries_array_len(); i++) {
-            if (strncasecmp(command, queries[i], strlen(queries[i])) == 0) {
+            if (strncasecmp(command, queries[i], strlen(queries[i])) == 0
+                    && strlen(queries[i]) == strlen(command)) {
                 return 1;
             }
         }
         // check if the buffer contains an enumeration command and execute it
         for (int i = 0; i < enumerates_array_len(); i++) {
-            if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0) {
+            if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0
+                    && strlen(enumerates[i]) == strlen(command)) {
                 return 1;
             }
         }
         // check if the buffer contains a service command and execute it
         for (int i = 0; i < services_array_len(); i++) {
-            if (strncasecmp(command, services[i], strlen(services[i])) == 0) {
+            if (strncasecmp(command, services[i], strlen(services[i])) == 0
+                    && strlen(services[i]) == strlen(command)) {
                 return 1;
             }
         }
@@ -142,7 +147,7 @@ static int hash(char *key) {
                 strlen(holder), seed) % PARTITIONS;
 
         LOG(DEBUG, "Destination node: %d for key %s\r\n", idx, holder);
-        /* free(holder); */
+        free(holder);
         return idx;
     } else return -1;
 }
@@ -294,7 +299,9 @@ int command_handler(int fd, int from_peer) {
                 }
             } else {
                 /* check the if the command is genuine */
-                int check = check_command(strdup(buf));
+                char *dupstr = strdup(buf);
+                int check = check_command(dupstr);
+                free(dupstr);
 
                 if (check == 1) {
 
@@ -351,6 +358,7 @@ int command_handler(int fd, int from_peer) {
                         /* route the command to the correct node */
                         route_command(idx, fd, b, &msg);
                     }
+                    free(b);
                 } else {
                     /* command received is not recognized or is a quit command */
                     switch (check) {
@@ -390,32 +398,37 @@ int process_command(char *buffer, int sfd, int rfd, unsigned int from_peer) {
     if (!command)
         return 1;
     // in case of 'QUIT' or 'EXIT' close the connection
-    if (strncasecmp(command, "quit", 4) == 0
-            || strncasecmp(command, "exit", 4) == 0)
+    if (strlen(command) == 4
+            && (strncasecmp(command, "quit", 4) == 0
+                || strncasecmp(command, "exit", 4) == 0))
         return END;
 
     // check if the buffer contains a command and execute it
     for (int i = 0; i < commands_array_len(); i++) {
-        if (strncasecmp(command, commands[i], strlen(commands[i])) == 0) {
+        if (strncasecmp(command, commands[i], strlen(commands[i])) == 0
+                && strlen(command) == strlen(commands[i])) {
             return (*cmds_func[i])(buffer + strlen(command) + 1);
         }
     }
     // check if the buffer contains a query and execute it
     for (int i = 0; i < queries_array_len(); i++) {
-        if (strncasecmp(command, queries[i], strlen(queries[i])) == 0) {
+        if (strncasecmp(command, queries[i], strlen(queries[i])) == 0
+                && strlen(command) == strlen(queries[i])) {
             return (*qrs_func[i])(buffer + strlen(command) + 1,
                     sfd, rfd, from_peer);
         }
     }
     // check if the buffer contains an enumeration command and execute it
     for (int i = 0; i < enumerates_array_len(); i++) {
-        if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0) {
+        if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0
+                && strlen(command) == strlen(enumerates[i])) {
             return (*enum_func[i])(sfd, rfd, from_peer);
         }
     }
     // check if the buffer contains a service command and execute it
     for (int i = 0; i < services_array_len(); i++) {
-        if (strncasecmp(command, services[i], strlen(services[i])) == 0) {
+        if (strncasecmp(command, services[i], strlen(services[i])) == 0
+                && strlen(command) == strlen(services[i])) {
             return (*srvs_func[i])();
         }
     }
@@ -630,11 +643,11 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
                     m.from_peer = 1;
                     char *payload = serialize(m);
                     schedule_write(sfd, payload, strlen(response) + S_OFFSET);
-                    /* free(payload); */
+                    free(payload);
                 } else {
                     schedule_write(sfd, kvstring, kvstrsize);
                 }
-                /* free(kvstring); */
+                free(kvstring);
                 ret = 1;
             }
         }
@@ -828,7 +841,7 @@ int count_command(int sfd, int rfd, unsigned int from_peer) {
             msg.content = response;
             char *payload = serialize(msg);
             schedule_write(sfd, payload, strlen(response) + S_OFFSET);
-            /* free(payload); */
+            free(payload);
         } else {
             schedule_write(sfd, c_len, 16);
         }

@@ -130,20 +130,20 @@ good results. Using a Linux box with an Intel(R) Core(TM) i5-4210U CPU @
 
 #### Performance improvements
 
-Still experimenting different path, the main bottleneck is the server interface
-where clients are served; initially I rewrote the network interface as a simple
-epoll main thread that handle EPOLLIN and EPOLLOUT events, using a thread-safe
-queue to dispatch incoming data on descriptor to a pool of reader thread, after
-being processed, their responsibility was to set the descriptor to EPOLLOUT, in
-this case the main thread enqueued the descriptor to a write queue, and a pool
-of writer thread constantly polling it had the responsibility to send out data.
-Later I decided to adopt a model more nginx like, using a pool of thread to
-spin their own event loop, and using the main thread only for accepting
-incoming connection, demanding them to worker reader threads, this time,
-allowing the main thread to also handle internal communication between other
-nodes, semplifying a bit the process. Still a pool of writer thread is used
-to send out data to clients, this approach seems better, but it is still in
-development and testing.
+Still experimenting different paths, the main bottleneck is the server
+interface where clients are served; initially I rewrote the network interface
+as a simple epoll main thread that handle EPOLLIN and EPOLLOUT events, using a
+thread-safe queue to dispatch incoming data on descriptor to a pool of reader
+threads. After being processed, their responsibility was to set the descriptor
+to EPOLLOUT, in this case the main thread enqueued the descriptor to a write
+queue, and a pool of writer threads constantly polling it, had the
+responsibility to send out data. Later I decided to adopt a model more nginx
+oriented, using a pool of threads to spin their own event loop, and using the
+main thread only for accepting incoming connection, demanding them to worker
+reader threads, this time, allowing the main thread to also handle internal
+communication between other nodes, semplifying a bit the process. Still a pool
+of writer threads is used to send out data to clients, this approach seems
+better, but it is still in development and testing.
 
 ### Changelog
 
