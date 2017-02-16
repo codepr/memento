@@ -198,7 +198,7 @@ static void route_command(int idx, int fd, char *b, struct message *msg) {
                 msg->from_peer = 0;
                 char *payload = serialize(*msg);
                 schedule_write(n->fd, payload, strlen(b) + S_OFFSET);
-                free(payload);
+                /* free(payload); */
                 LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
                 break;
             }
