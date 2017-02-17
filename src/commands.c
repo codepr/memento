@@ -304,7 +304,6 @@ int command_handler(int fd, int from_peer) {
                                 msg = (struct message) { b, fd, 0 };
                                 char *payload = serialize(msg);
                                 schedule_write(n->fd, payload, strlen(b) + S_OFFSET, 1);
-                                /* free(payload); */
                                 LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
                             }
                             cursor = cursor->next;
@@ -867,7 +866,7 @@ int values_command(arguments args) {
 int keyspace_command(arguments args) {
     if (instance.store) {
         if (instance.store->size > 0) {
-            char *ans = calloc(1, 64); /* provisional size */
+            char *ans = calloc(1, 128); /* provisional size */
             list *spacelist = list_create();
 
             map_iterate2(instance.store, gather_infos, spacelist);
@@ -884,6 +883,8 @@ int keyspace_command(arguments args) {
             float fsize = 0.0;
             if (size >= 1024) fsize = size / 1024;
             else fsize = size;
+            snprintf(ans, 128, "Keys: %u\nSpace: %f\n", nrkeys, fsize);
+            /* list_release(spacelist); */
 
             if (instance.cluster_mode == 0 && args.fp == 1) {
                 char *response = calloc(1, strlen(ans) + strlen(self.addr) + strlen(self.name) + 9);
@@ -892,8 +893,7 @@ int keyspace_command(arguments args) {
                 char *payload = serialize(msg);
                 schedule_write(args.sfd, payload, strlen(response) + S_OFFSET, 1);
             } else {
-                snprintf(ans, 64, "Keys: %u\nSpace: %f\n", nrkeys, fsize);
-                schedule_write(args.sfd, ans, 64, 0);
+                schedule_write(args.sfd, ans, strlen(ans), 0);
             }
         }
     }
