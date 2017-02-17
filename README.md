@@ -19,13 +19,14 @@ not strictly uppercase.
 | **INC**         | `<key>` `<qty>`            | Increment by `<qty>` the value idenfied by `<key>`, if no `<qty>` is specified increment by 1                 |
 | **DEC**         | `<key>` `<qty>`            | Decrement by `<qty>` the value idenfied by `<key>`, if no `<qty>` is specified decrement by 1                 |
 | **INCF**        | `<key>` `<qty>`            | Increment by float `<qty>` the value identified by `<key>`, if no `<qty>` is specified increment by 1.0       |
-| **DECF**        |  `<key>` `<qty>`           | Decrement by `<qty>` the value identified by `<key>`, if no `<qty>` is specified decrement by 1.0             |
-| **GETP**        |  `<key>`                   | Get all information of a key-value pair represented by `<key>`, like key, value, creation time and expire time|
+| **DECF**        | `<key>` `<qty>`            | Decrement by `<qty>` the value identified by `<key>`, if no `<qty>` is specified decrement by 1.0             |
+| **GETP**        | `<key>`                    | Get all information of a key-value pair represented by `<key>`, like key, value, creation time and expire time|
 | **APPEND**      | `<key>` `<value>`          | Append `<value>` to `<key>`                                                                                   |
 | **PREPEND**     | `<key>` `<value>`          | Prepend `<value>` to `<key>`                                                                                  |
 | **KEYS**        |                            | List all keys stored into the keyspace                                                                        |
 | **VALUES**      |                            | List all values stored into the keyspace                                                                      |
 | **COUNT**       |                            | Return the number of key-value pair stored                                                                    |
+| **KEYSPACE**    |                            | Get some informations on the distribution of the keyspace and occupied space                                  |
 | **FLUSH**       |                            | Delete all maps stored inside partitions                                                                      |
 | **CLUSTERINFO** |                            | Get some informations on the cluster current state                                                            |
 | **QUIT/EXIT**   |                            | Close connection                                                                                              |

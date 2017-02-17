@@ -409,27 +409,12 @@ int (*srvs_func[]) (void) = {
 };
 
 
-/* utility function, concat two strings togheter */
-static char *append_string(const char *str, const char *token) {
-    size_t len = strlen(str) + strlen(token);
-    char *ret = malloc(len * sizeof(char) + 1);
-    *ret = '\0';
-    return strcat(strcat(ret, str), token);
-}
-
-
-/* utility function, remove trailing newline */
-static void remove_newline(char *str) {
-    str[strcspn(str, "\r\n")] = 0;
-}
-
-
 static int gather_infos(void *t1, void *t2) {
     map_entry *kv = (map_entry *) t2;
     list *splist = (list *) t1;
     unsigned int space = strlen(kv->key) + strlen(kv->val)
         + (2 * sizeof(unsigned long)) + 2;
-    splist = list_tail_insert(splist, &space);
+    splist = list_head_insert(splist, &space);
     return MAP_OK;
 }
 
@@ -866,33 +851,28 @@ int keyspace_command(arguments args) {
         if (instance.store->size > 0) {
             char *ans = calloc(1, 64); /* provisional size */
             list *spacelist = list_create();
-
+            /* Iterates through the local map instance, adding the size of the
+               reserved space for the stored keys */
             map_iterate2(instance.store, gather_infos, spacelist);
             unsigned int size = 0;
-            unsigned int nrkeys = 0;
 
             list_node *n = spacelist->head;
             while(n) {
                 size += *(int *) n->data;
                 n = n->next;
-                nrkeys++;
             }
-
-            float fsize = 0.0;
-            if (size >= 1024) {
-                fsize = size / 1024;
-                snprintf(ans, 64, "Keys: %u\tSpace: %f Kb\n", nrkeys, fsize);
-            } else {
-                snprintf(ans, 64, "Keys: %u\tSpace: %u B\n", nrkeys, size);
-            }
+            /* Transform the size from byte to kilobytes */
+            float fsize = size / 1024;
 
             if (instance.cluster_mode == 1 && args.fp == 1) {
+                snprintf(ans, 64, "Keys: %lu\tSpace: %.2f Kb", instance.store->size, fsize);
                 char *response = calloc(1, strlen(ans) + strlen(self.addr) + strlen(self.name) + 9);
-                sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, ans);
+                sprintf(response, "%s\t%s:%s:%d\n", ans, self.name, self.addr, self.port);
                 struct message msg = { response, args.rfd, 1 };
                 char *payload = serialize(msg);
                 schedule_write(args.sfd, payload, strlen(response) + S_OFFSET, 1);
             } else {
+                snprintf(ans, 64, "Keys: %lu\tSpace: %.2f Kb\n", instance.store->size, fsize);
                 schedule_write(args.sfd, ans, strlen(ans), 0);
             }
         }

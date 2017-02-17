@@ -151,7 +151,7 @@ int cluster_reachable(cluster_node *node) {
 
 
 /*
- * Count the number of cluster nodes in a state of 'UNREACHABLE'
+ * Count the number of cluster nodes in a state of UNREACHABLE
  */
 int cluster_unreachable_count(void) {
     list_node *cursor = instance.cluster->head;
@@ -211,7 +211,7 @@ cluster_node *cluster_get_node(const char *host, const char *port) {
 
 
 /*
- * Add a node to the cluster by joining
+ * Add a node to the cluster by adding it to the cluster list of nodes
  */
 int cluster_join(const char *host, const char *port) {
     int fd;
@@ -272,6 +272,9 @@ void cluster_balance(void) {
 }
 
 
+/*
+ * Sets the name of the self node of the cluster, just for utility usages
+ */
 void cluster_set_selfname(const char *name) {
     self.name = strdup(name);
 }

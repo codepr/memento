@@ -294,3 +294,19 @@ void s_log(loglevel level, const char *info, ...) {
     }
 }
 
+
+/* Utility function, concat two strings togheter */
+char *append_string(const char *str, const char *token) {
+    size_t len = strlen(str) + strlen(token);
+    char *ret = malloc(len * sizeof(char) + 1);
+    *ret = '\0';
+    return strcat(strcat(ret, str), token);
+}
+
+
+/* Utility function, remove trailing newline */
+void remove_newline(char *str) {
+    str[strcspn(str, "\r\n")] = 0;
+}
+
+
