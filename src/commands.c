@@ -36,30 +36,21 @@
 /* Private functions declarations */
 static void get_clusterinfo(int sfd);
 
+
 /*
  * Array of commands that doesn't need a file descriptor, they exclusively
  * perform side-effects on the keyspace
  */
-const char *commands[]   = { "set", "del", "inc", "incf", "dec", "decf",
-    "append", "prepend", "expire" };
-/*
- * Array of query-commands, they do not perform side-effects directly on the
- * keyspace (except for sub/unsub, that add/remove file-descriptor as subscriber
- * to a 'topic' key), but they need a file-descriptor in order to respond to the
- * client requesting
- */
-const char *queries[]    = { "get", "getp", "ttl" };
-/*
- * Array of enumeration-commands, they perform action based on iteration through
- * the whole keyspace and respond with results directly to the client
- */
-const char *enumerates[] = { "count", "keys", "values" };
+const char *commands[] = { "set", "del", "inc", "incf", "dec", "decf",
+    "append", "prepend", "expire", "get", "getp", "ttl", "count", "keys",
+    "values", "keyspace" };
 
-/*
- * Array of service-commands, currently there's just one command resident here
+
+/* Array of service-commands, currently there's just one command resident here
  * flush the whole keyspace by deleting all contents and freeing up space.
  */
-const char *services[]   = { "flush", "clusterinfo" };
+const char *services[] = { "flush" };
+
 
 /*
  * Length of the commands-arrays, cannot be retrieved with a generic function by
@@ -68,14 +59,6 @@ const char *services[]   = { "flush", "clusterinfo" };
  */
 int commands_array_len(void) {
     return sizeof(commands) / sizeof(char *);
-}
-
-int queries_array_len(void) {
-    return sizeof(queries) / sizeof(char *);
-}
-
-int enumerates_array_len(void) {
-    return sizeof(enumerates) / sizeof(char *);
 }
 
 int services_array_len(void) {
@@ -105,21 +88,7 @@ int check_command(char *buffer) {
                 return 1;
             }
         }
-        // check if the buffer contains a query and execute it
-        for (int i = 0; i < queries_array_len(); i++) {
-            if (strncasecmp(command, queries[i], strlen(queries[i])) == 0
-                    && strlen(queries[i]) == strlen(command)) {
-                return 1;
-            }
-        }
-        // check if the buffer contains an enumeration command and execute it
-        for (int i = 0; i < enumerates_array_len(); i++) {
-            if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0
-                    && strlen(enumerates[i]) == strlen(command)) {
-                return 1;
-            }
-        }
-        // check if the buffer contains a service command and execute it
+        /* check if the buffer contains a service command and execute it */
         for (int i = 0; i < services_array_len(); i++) {
             if (strncasecmp(command, services[i], strlen(services[i])) == 0
                     && strlen(services[i]) == strlen(command)) {
@@ -160,13 +129,13 @@ static int hash(char *key) {
 static int answer(int fd, int resp) {
     switch (resp) {
         case MAP_OK:
-            schedule_write(fd, S_OK, sizeof(S_OK));
+            schedule_write(fd, S_OK, sizeof(S_OK), 0);
             break;
         case MAP_ERR:
-            schedule_write(fd, S_NIL, sizeof(S_NIL));
+            schedule_write(fd, S_NIL, sizeof(S_NIL), 0);
             break;
         case COMMAND_NOT_FOUND:
-            schedule_write(fd, S_UNK, sizeof(S_UNK));
+            schedule_write(fd, S_UNK, sizeof(S_UNK), 0);
             break;
         case END:
             return END;
@@ -202,8 +171,7 @@ static void route_command(int idx, int fd, char *b, struct message *msg) {
                 msg->fd = fd;
                 msg->from_peer = 0;
                 char *payload = serialize(*msg);
-                schedule_write(n->fd, payload, strlen(b) + S_OFFSET);
-                /* free(payload); */
+                schedule_write(n->fd, payload, strlen(b) + S_OFFSET, 1);
                 LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
                 break;
             }
@@ -241,7 +209,6 @@ int command_handler(int fd, int from_peer) {
              */
             if (from_peer == 1) {
 
-                /* LOG(DEBUG, "Received data from peer node, testing pre deserialization: %s\n", buf); */
                 /* message came from a peer node, so it is serialized */
                 struct message m = deserialize(buf); // deserialize into message structure
                 LOG(DEBUG, "Received data from peer node, message: %s\n", m.content);
@@ -252,14 +219,14 @@ int command_handler(int fd, int from_peer) {
 
                     /* answer to the original client */
                     if (strcmp(m.content, S_OK) == 0)
-                        schedule_write(m.fd, S_OK, strlen(S_OK));
+                        schedule_write(m.fd, S_OK, strlen(S_OK), 0);
                     else if (strcmp(m.content, S_NIL) == 0)
-                        schedule_write(m.fd, S_NIL, strlen(S_NIL));
+                        schedule_write(m.fd, S_NIL, strlen(S_NIL), 0);
                     else if (strcmp(m.content, S_UNK) == 0)
-                        schedule_write(m.fd, S_UNK, strlen(S_UNK));
+                        schedule_write(m.fd, S_UNK, strlen(S_UNK), 0);
                 } else if (m.from_peer == 1) {
                     /* answer to a query operations to the original client */
-                    schedule_write(m.fd, m.content, strlen(m.content));
+                    schedule_write(m.fd, m.content, strlen(m.content), 1);
 
                 } else {
                     /* message from another node */
@@ -267,25 +234,16 @@ int command_handler(int fd, int from_peer) {
                     char *payload = NULL;
                     switch (process_command(m.content, fd, m.fd, 1)) {
                         case MAP_OK:
-                            msg.content = S_OK;
-                            msg.fd = m.fd;
-                            msg.from_peer = 0;
+                            msg = (struct message) { S_OK, m.fd, 0 };
                             len = strlen(S_OK) + S_OFFSET;
-                            payload = serialize(msg);
                             break;
                         case MAP_ERR:
-                            msg.content = S_NIL;
-                            msg.fd = m.fd;
-                            msg.from_peer = 0;
+                            msg = (struct message) { S_NIL, m.fd, 0 };
                             len = strlen(S_NIL) + S_OFFSET;
-                            payload = serialize(msg);
                             break;
                         case COMMAND_NOT_FOUND:
-                            msg.content = S_UNK;
-                            msg.fd = m.fd;
-                            msg.from_peer = 0;
+                            msg = (struct message) {S_UNK, m.fd, 0 };
                             len = strlen(S_UNK) + S_OFFSET;
-                            payload = serialize(msg);
                             break;
                         case END:
                             ret = END;
@@ -293,9 +251,11 @@ int command_handler(int fd, int from_peer) {
                         default:
                             break;
                     }
-                    schedule_write(fd, payload, len);
-                    LOG(DEBUG, "Response to peer node\n");
-                    /* if (payload) free(payload); */
+                    if (ret != END) {
+                        payload = serialize(msg);
+                        schedule_write(fd, payload, len, 1);
+                        LOG(DEBUG, "Response to peer node\n");
+                    }
                 }
             } else {
                 /* check the if the command is genuine */
@@ -331,7 +291,8 @@ int command_handler(int fd, int from_peer) {
                     } else if (strncasecmp(command, "count", 5) == 0 ||
                             strncasecmp(command, "keys", 4) == 0 ||
                             strncasecmp(command, "values", 6) == 0 ||
-                            strncasecmp(command, "flush", 5) == 0) {
+                            strncasecmp(command, "flush", 5) == 0 ||
+                            strncasecmp(command, "keyspace", 8) == 0) {
                         /* it is a global command, must handle this differently
                          * TODO: implement a better way to handle this case
                          */
@@ -340,11 +301,9 @@ int command_handler(int fd, int from_peer) {
                             cluster_node *n = (cluster_node *) cursor->data;
                             if (n->self == 1) answer(fd, process_command(b, fd, fd, 0));
                             else {
-                                msg.content = b;
-                                msg.fd = fd;
-                                msg.from_peer = 0;
+                                msg = (struct message) { b, fd, 0 };
                                 char *payload = serialize(msg);
-                                schedule_write(n->fd, payload, strlen(b) + S_OFFSET);
+                                schedule_write(n->fd, payload, strlen(b) + S_OFFSET, 1);
                                 /* free(payload); */
                                 LOG(DEBUG, "Redirect toward cluster member %s\n", n->name);
                             }
@@ -363,7 +322,7 @@ int command_handler(int fd, int from_peer) {
                     /* command received is not recognized or is a quit command */
                     switch (check) {
                         case COMMAND_NOT_FOUND:
-                            schedule_write(fd, S_UNK, strlen(S_UNK));
+                            schedule_write(fd, S_UNK, strlen(S_UNK), 0);
                             break;
                         case END:
                             ret = END;
@@ -391,6 +350,7 @@ int command_handler(int fd, int from_peer) {
 int process_command(char *buffer, int sfd, int rfd, unsigned int from_peer) {
     char *command = NULL;
     command = strtok(buffer, " \r\n");
+
     /*
      * In case of empty command return nothing, next additions will be awaiting
      * for incoming chunks
@@ -407,25 +367,12 @@ int process_command(char *buffer, int sfd, int rfd, unsigned int from_peer) {
     for (int i = 0; i < commands_array_len(); i++) {
         if (strncasecmp(command, commands[i], strlen(commands[i])) == 0
                 && strlen(command) == strlen(commands[i])) {
-            return (*cmds_func[i])(buffer + strlen(command) + 1);
+            /* return (*cmds_func[i])(buffer + strlen(command) + 1); */
+            arguments args = {buffer + strlen(command) + 1, sfd, rfd, from_peer };
+            return (*cmds_func[i])(args);
         }
     }
-    // check if the buffer contains a query and execute it
-    for (int i = 0; i < queries_array_len(); i++) {
-        if (strncasecmp(command, queries[i], strlen(queries[i])) == 0
-                && strlen(command) == strlen(queries[i])) {
-            return (*qrs_func[i])(buffer + strlen(command) + 1,
-                    sfd, rfd, from_peer);
-        }
-    }
-    // check if the buffer contains an enumeration command and execute it
-    for (int i = 0; i < enumerates_array_len(); i++) {
-        if (strncasecmp(command, enumerates[i], strlen(enumerates[i])) == 0
-                && strlen(command) == strlen(enumerates[i])) {
-            return (*enum_func[i])(sfd, rfd, from_peer);
-        }
-    }
-    // check if the buffer contains a service command and execute it
+    /* check if the buffer contains a service command and execute it */
     for (int i = 0; i < services_array_len(); i++) {
         if (strncasecmp(command, services[i], strlen(services[i])) == 0
                 && strlen(command) == strlen(services[i])) {
@@ -439,7 +386,7 @@ int process_command(char *buffer, int sfd, int rfd, unsigned int from_peer) {
 /* Mapping tables to the commands handlers, maintaining the order defined by
  * arrays of commands
  */
-int (*cmds_func[]) (char *) = {
+int (*cmds_func[]) (arguments) = {
     &set_command,
     &del_command,
     &inc_command,
@@ -448,24 +395,21 @@ int (*cmds_func[]) (char *) = {
     &decf_command,
     &append_command,
     &prepend_command,
-    &expire_command
-};
-
-int (*qrs_func[]) (char *, int, int, unsigned int) = {
+    &expire_command,
     &get_command,
     &getp_command,
-    &ttl_command
-};
-
-int (*enum_func[]) (int, int, unsigned int) = {
+    &ttl_command,
     &count_command,
     &keys_command,
-    &values_command
+    &values_command,
+    &keyspace_command
 };
+
 
 int (*srvs_func[]) (void) = {
     &flush_command
 };
+
 
 /* utility function, concat two strings togheter */
 static char *append_string(const char *str, const char *token) {
@@ -482,6 +426,16 @@ static void remove_newline(char *str) {
 }
 
 
+static int gather_infos(void *t1, void *t2) {
+    map_entry *kv = (map_entry *) t2;
+    list *splist = (list *) t1;
+    unsigned int space = strlen(kv->key) + strlen(kv->val)
+        + (2 * sizeof(unsigned long)) + 2;
+    splist = list_tail_insert(splist, &space);
+    return MAP_OK;
+}
+
+
 /* callback function to print all keys inside the hashmap */
 static int print_keys(void *t1, void *t2) {
     map_entry *kv = (map_entry *) t2;
@@ -489,9 +443,8 @@ static int print_keys(void *t1, void *t2) {
     char *stringkey = calloc(strlen(kv->key) + 1, sizeof(*stringkey));
     strcpy(stringkey, kv->key);
     char *key_nl = append_string(stringkey, "\n");
-    schedule_write(*fd, key_nl, strlen(key_nl));
-    /* free(key_nl); */
-    /* free(stringkey); */
+    schedule_write(*fd, key_nl, strlen(key_nl), 1);
+    free(stringkey);
     return MAP_OK;
 }
 
@@ -501,16 +454,12 @@ static int cluster_print_keys(void *t1, void *t2, void *t3) {
     map_entry *entry = (map_entry *) t3;
     int *sfd = (int *) t1;
     int *rfd = (int *) t2;
-    struct message msg;
-    msg.from_peer = 1;
-    msg.fd = *rfd;
     char *key = malloc(strlen((char *) entry->key) + 2);
     snprintf(key, strlen((char *) entry->key) + 2, "%s\n\n", (char *) entry->key);
     key[strlen((char *) entry->key) + 2] = '\0';
-    msg.content = key;
+    struct message msg = { key, *rfd, 1 };
     char *payload = serialize(msg);
-    schedule_write(*sfd, payload, strlen(entry->key) + 2 + S_OFFSET);
-    /* free(payload); */
+    schedule_write(*sfd, payload, strlen(entry->key) + 2 + S_OFFSET, 1);
     return MAP_OK;
 }
 
@@ -519,7 +468,7 @@ static int cluster_print_keys(void *t1, void *t2, void *t3) {
 static int print_values(void *t1, void *t2) {
     map_entry *entry = (map_entry *) t2;
     int *fd = (int *) t1;
-    schedule_write(*fd, entry->val, strlen(entry->val));
+    schedule_write(*fd, entry->val, strlen(entry->val), 0);
     return MAP_OK;
 }
 
@@ -529,18 +478,54 @@ static int cluster_print_values(void *t1, void *t2, void *t3) {
     map_entry *entry = (map_entry *) t3;
     int *sfd = (int *) t1;
     int *rfd = (int *) t2;
-    struct message msg;
-    msg.from_peer = 1;
-    msg.fd = *rfd;
     char *val = malloc(strlen((char *) entry->val) + 1);
     snprintf(val, strlen((char *) entry->val) + 1, "%s\n", (char *) entry->val);
-    msg.content = val;
+    struct message msg = { val, *rfd, 1 };
     char *payload = serialize(msg);
-    schedule_write(*sfd, payload, strlen(entry->val) + 2 + S_OFFSET);
-    /* free(payload); */
+    schedule_write(*sfd, payload, strlen(entry->val) + 2 + S_OFFSET, 1);
     return MAP_OK;
 }
 
+
+/* FLUSH command handler, delete the entire keyspace.
+ *
+ * Doesn't require any argument.
+ */
+int flush_command(void) {
+    if (instance.store != NULL) {
+        map_release(instance.store);
+        instance.store = NULL;
+        instance.store = map_create();
+    }
+    return OK;
+}
+
+
+/*
+ * CLUSTERINFO command handler, collect some informations of the cluster, used
+ * as a private function.
+ *
+ */
+static void get_clusterinfo(int sfd) {
+    if (instance.cluster_mode == 1) {
+        char info[1024 * instance.cluster->len];
+        int pos = 0;
+        list_node *cursor = instance.cluster->head;
+        while (cursor) {
+            cluster_node *n = (cluster_node *) cursor->data;
+            int size = strlen(n->name) + strlen(n->addr) + 47; // 47 for literal string
+            char *status = "reachable";
+            if (n->state == UNREACHABLE) status = "unreachable";
+            snprintf(info + pos, size, "%s - %s:%d - Key range: %d - %d %s\n", n->name,
+                    n->addr, n->port, n->range_min, n->range_max, status);
+            pos += size;
+            cursor = cursor->next;
+        }
+        schedule_write(sfd, info, pos, 0);
+    }
+}
+
+/* TESTING */
 
 /*
  * SET command handler, calculate in which position of the array of the int
@@ -551,9 +536,9 @@ static int cluster_print_values(void *t1, void *t2, void *t3) {
  *
  *     SET <key> <value>
  */
-int set_command(char *command) {
+int set_command(arguments args) {
     int ret = 0;
-    void *key = strtok(command, " ");
+    void *key = strtok(args.cmd, " ");
     if (key) {
         void *val = (char *) key + strlen(key) + 1;
         if (val) ret = map_put(instance.store, strdup(key), strdup(val));
@@ -571,27 +556,23 @@ int set_command(char *command) {
  *
  *     GET <key>
  */
-int get_command(char *command, int sfd, int rfd, unsigned int from_peer) {
+int get_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             void *val = map_get(instance.store, key);
             if (val) {
-                if (instance.cluster_mode == 1 && from_peer == 1) {
-                    struct message m;
+                if (instance.cluster_mode == 1 && args.fp == 1) {
                     /* adding some informations about the node host */
                     char response[strlen((char *) val) + strlen(self.addr) + strlen(self.name) + 9];
                     sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, (char *) val);
-                    m.content = response;
-                    m.fd = rfd;
-                    m.from_peer = 1;
+                    struct message m = {response, args.rfd, 1 };
                     char *payload = serialize(m);
-                    schedule_write(sfd, payload, strlen(response) + S_OFFSET);
-                    /* free(payload); */
+                    schedule_write(args.sfd, payload, strlen(response) + S_OFFSET, 1);
                 } else {
-                    schedule_write(sfd, val, strlen((char *) val));
+                    schedule_write(args.sfd, val, strlen((char *) val), 0);
                 }
                 ret = 1;
             }
@@ -611,10 +592,10 @@ int get_command(char *command, int sfd, int rfd, unsigned int from_peer) {
  *
  *     GETP <key>
  */
-int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
+int getp_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             map_entry *kv = map_get_entry(instance.store, key);
@@ -631,21 +612,17 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
                     sprintf(expire_time, "%d\n", -1);
 
                 /* format answer */
-                sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %s\n",
+                sprintf(kvstring, "key: %s\nvalue: %screation_time: %ld\nexpire_time: %s",
                         (char *) kv->key, (char *) kv->val, kv->creation_time, expire_time);
-                if (instance.cluster_mode == 1 && from_peer == 1) {
-                    struct message m;
+                if (instance.cluster_mode == 1 && args.fp == 1) {
                     /* adding some informations about the node host */
-                    char response[strlen(kvstring) + strlen(self.addr) + strlen(self.name) + 18];
-                    sprintf(response, "Node: %s:%s:%d\n%s\n", self.name, self.addr, self.port, kvstring);
-                    m.content = response;
-                    m.fd = rfd;
-                    m.from_peer = 1;
+                    char response[strlen(kvstring) + strlen(self.addr) + strlen(self.name) + 17];
+                    sprintf(response, "Node: %s:%s:%d\n%s", self.name, self.addr, self.port, kvstring);
+                    struct message m = { response, args.rfd, 1 };
                     char *payload = serialize(m);
-                    schedule_write(sfd, payload, strlen(response) + S_OFFSET);
-                    free(payload);
+                    schedule_write(args.sfd, payload, strlen(response) + S_OFFSET, 1);
                 } else {
-                    schedule_write(sfd, kvstring, kvstrsize);
+                    schedule_write(args.sfd, kvstring, kvstrsize, 0);
                 }
                 free(kvstring);
                 ret = 1;
@@ -665,10 +642,10 @@ int getp_command(char *command, int sfd, int rfd, unsigned int from_peer) {
  *
  *     DEL <key>
  */
-int del_command(char *command) {
+int del_command(arguments args) {
     int ret = 0;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         while (key) {
             trim(key);
             ret = map_del(instance.store, key);
@@ -690,10 +667,10 @@ int del_command(char *command) {
  *     INC <key>   // +1 to <key>
  *     INC <key> 5 // +5 to <key>
  */
-int inc_command(char *command) {
+int inc_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             void *val = map_get(instance.store, key);
@@ -725,10 +702,10 @@ int inc_command(char *command) {
  *     INCF <key>     // +1.0 to <key>
  *     INCF <key> 5.0 // +5.0 to <key>
  */
-int incf_command(char *command) {
+int incf_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             void *val = map_get(instance.store, key);
@@ -760,10 +737,10 @@ int incf_command(char *command) {
  *     DEC <key>   // -1 to <key>
  *     DEC <key> 5 // -5 to <key>
  */
-int dec_command(char *command) {
+int dec_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             void *val = map_get(instance.store, key);
@@ -795,10 +772,10 @@ int dec_command(char *command) {
  *     DECF <key>     // -1.0 to <key>
  *     DECF <key> 5.0 // -5.0 to <key>
  */
-int decf_command(char *command) {
+int decf_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             void *val = map_get(instance.store, key);
@@ -825,25 +802,21 @@ int decf_command(char *command) {
  *
  * Doesn't require any argument.
  */
-int count_command(int sfd, int rfd, unsigned int from_peer) {
+int count_command(arguments args) {
     if (instance.store) {
         unsigned long len = instance.store->size;
         char c_len[16];
         memset(c_len, 0x00, 16);
         snprintf(c_len, 16, "%lu\n", len);
-        if (instance.cluster_mode == 1 && from_peer == 1) {
-            struct message msg;
-            msg.fd = rfd;
-            msg.from_peer = 1;
-            char response[strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9];
-            memset(response, 0x00, strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9);
+        if (instance.cluster_mode == 1 && args.fp == 1) {
+            /* char response[strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9]; */
+            char *response = calloc(1, strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9);
             sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, c_len);
-            msg.content = response;
+            struct message msg = { response, args.rfd, 1 };
             char *payload = serialize(msg);
-            schedule_write(sfd, payload, strlen(response) + S_OFFSET);
-            free(payload);
+            schedule_write(args.sfd, payload, strlen(response) + S_OFFSET, 1);
         } else {
-            schedule_write(sfd, c_len, 16);
+            schedule_write(args.sfd, c_len, 16, 0);
         }
     }
     return 1;
@@ -855,13 +828,13 @@ int count_command(int sfd, int rfd, unsigned int from_peer) {
  *
  * Doesn't require any argument.
  */
-int keys_command(int sfd, int rfd, unsigned int from_peer) {
+int keys_command(arguments args) {
     if (instance.store) {
         if (instance.store->size > 0) {
-            if (instance.cluster_mode == 1 && from_peer == 1) {
-                map_iterate3(instance.store, cluster_print_keys, &sfd, &rfd);
+            if (instance.cluster_mode == 1 && args.fp == 1) {
+                map_iterate3(instance.store, cluster_print_keys, &args.sfd, &args.rfd);
             } else {
-                map_iterate2(instance.store, print_keys, &sfd);
+                map_iterate2(instance.store, print_keys, &args.sfd);
             }
         }
     }
@@ -874,13 +847,53 @@ int keys_command(int sfd, int rfd, unsigned int from_peer) {
  *
  * Doesn't require any argument.
  */
-int values_command(int sfd, int rfd, unsigned int from_peer) {
+int values_command(arguments args) {
     if (instance.store) {
         if (instance.store->size > 0) {
-            if (instance.cluster_mode == 1 && from_peer == 1) {
-                map_iterate3(instance.store, cluster_print_values, &sfd, &rfd);
+            if (instance.cluster_mode == 1 && args.fp == 1) {
+                map_iterate3(instance.store, cluster_print_values, &args.sfd, &args.rfd);
             } else {
-                map_iterate2(instance.store, print_values, &sfd);
+                map_iterate2(instance.store, print_values, &args.sfd);
+            }
+        }
+    }
+    return 1;
+}
+
+
+/*
+ * Retrieve some key distribution informations
+ */
+int keyspace_command(arguments args) {
+    if (instance.store) {
+        if (instance.store->size > 0) {
+            char *ans = calloc(1, 64); /* provisional size */
+            list *spacelist = list_create();
+
+            map_iterate2(instance.store, gather_infos, spacelist);
+            unsigned int size = 0;
+            unsigned int nrkeys = 0;
+
+            list_node *n = spacelist->head;
+            while(n) {
+                size += *(int *) n->data;
+                n = n->next;
+                nrkeys++;
+            }
+
+            float fsize = 0.0;
+            if (size >= 1024) fsize = size / 1024;
+            else fsize = size;
+
+            if (instance.cluster_mode == 0 && args.fp == 1) {
+                char *response = calloc(1, strlen(ans) + strlen(self.addr) + strlen(self.name) + 9);
+                sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, ans);
+                struct message msg = { response, args.rfd, 1 };
+                char *payload = serialize(msg);
+                schedule_write(args.sfd, payload, strlen(response) + S_OFFSET, 1);
+            } else {
+                snprintf(ans, 64, "Keys: %u\nSpace: %f\n", nrkeys, fsize);
+                schedule_write(args.sfd, ans, 64, 0);
             }
         }
     }
@@ -897,10 +910,10 @@ int values_command(int sfd, int rfd, unsigned int from_peer) {
  *
  *     APPEND <key> <value>
  */
-int append_command(char *command) {
+int append_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         void *val = (char *) key + strlen(key) + 1;
         if (key && val) {
             char *key_holder = strdup(key);
@@ -925,10 +938,10 @@ int append_command(char *command) {
  *
  *     PREPEND <key> <value>
  */
-int prepend_command(char *command) {
+int prepend_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         void *val = (char *) key + strlen(key) + 1;
         if (key && val) {
             char *key_holder = strdup(key);
@@ -949,10 +962,10 @@ int prepend_command(char *command) {
  * EXPIRE command handler, get the entry identified by the key and set a ttl
  * after wchich the key will be deleted.
  */
-int expire_command(char *command) {
+int expire_command(arguments args) {
     int ret = MAP_ERR;
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             map_entry *entry = malloc(sizeof(map_entry));
@@ -980,9 +993,9 @@ int expire_command(char *command) {
  *
  *     TTL <key>
  */
-int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
+int ttl_command(arguments args) {
     if (instance.store) {
-        void *key = strtok(command, " ");
+        void *key = strtok(args.cmd, " ");
         if (key) {
             trim(key);
             map_entry *kv = malloc(sizeof(map_entry));
@@ -993,16 +1006,12 @@ int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
                     sprintf(ttl, "%ld\n", kv->expire_time / 1000);
                 else
                     sprintf(ttl, "%d\n", -1);
-                if (instance.cluster_mode == 1 && from_peer == 1) {
-                    struct message msg;
-                    msg.fd = rfd;
-                    msg.content = ttl;
-                    msg.from_peer = 1;
+                if (instance.cluster_mode == 1 && args.fp == 1) {
+                    struct message msg = {ttl, args.rfd, 1 };
                     char *payload = serialize(msg);
-                    schedule_write(sfd, payload, strlen(ttl) + S_OFFSET);
-                    /* free(payload); */
+                    schedule_write(args.sfd, payload, strlen(ttl) + S_OFFSET, 1);
                 } else {
-                    schedule_write(sfd, ttl, 7);
+                    schedule_write(args.sfd, ttl, 7, 0);
                 }
             }
         } else return MAP_ERR;
@@ -1011,40 +1020,3 @@ int ttl_command(char *command, int sfd, int rfd, unsigned int from_peer) {
 }
 
 
-/*
- * FLUSH command handler, delete the entire keyspace.
- *
- * Doesn't require any argument.
- */
-int flush_command(void) {
-    if (instance.store != NULL) {
-        map_release(instance.store);
-        instance.store = NULL;
-    }
-    return OK;
-}
-
-
-/*
- * CLUSTERINFO command handler, collect some informations of the cluster, used
- * as a private function.
- *
- */
-static void get_clusterinfo(int sfd) {
-    if (instance.cluster_mode == 1) {
-        char info[1024 * instance.cluster->len];
-        int pos = 0;
-        list_node *cursor = instance.cluster->head;
-        while (cursor) {
-            cluster_node *n = (cluster_node *) cursor->data;
-            int size = strlen(n->name) + strlen(n->addr) + 47; // 47 for literal string
-            char *status = "reachable";
-            if (n->state == UNREACHABLE) status = "unreachable";
-            snprintf(info + pos, size, "%s - %s:%d - Key range: %d - %d %s\n", n->name,
-                    n->addr, n->port, n->range_min, n->range_max, status);
-            pos += size;
-            cursor = cursor->next;
-        }
-        schedule_write(sfd, info, pos);
-    }
-}

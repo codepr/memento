@@ -33,8 +33,8 @@
  */
 struct message {
     char *content;
-    unsigned int from_peer : 1;
     int fd;
+    unsigned int from_peer : 1;
 };
 
 /* serialization API */

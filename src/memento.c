@@ -61,7 +61,6 @@ static void *form_cluster_thread(void *p) {
 
         if (len <= 0) instance.lock = 0; // all nodes are connected, release lock
 
-        LOG(DEBUG, "Instance lock: %u\n", instance.lock);
         sleep(3);
     }
 
@@ -190,6 +189,7 @@ int main(int argc, char **argv) {
                     new_node->self = 1;
                     new_node->state = REACHABLE;
                 }
+                if (!id) cluster_set_selfname(name);
             }
             else new_node->self = 0;
 
@@ -198,7 +198,6 @@ int main(int argc, char **argv) {
             /* add the node to the cluster list */
             cluster_add_node(new_node);
 
-            if (!id) cluster_set_selfname(name);
         }
 
         fclose(file);

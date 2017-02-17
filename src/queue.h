@@ -37,8 +37,8 @@ typedef struct queue {
     unsigned long len;
     queue_item *front;
     queue_item *rear;
-    pthread_mutex_t w_mutex;
-    pthread_cond_t w_cond;
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
 } queue;
 
 

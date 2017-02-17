@@ -223,6 +223,8 @@ static void *writer_worker(void *args) {
         if (send(udata->fd, udata->data, udata->size, 0) < 0)
             perror("Send data failed");
 
+        /* Check if struct udata contains allocated memory */
+        if (udata->heapmem == 1) free(udata->data);
         free(udata);
     }
 
@@ -409,12 +411,13 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
  * Add userdata_t structure to the instance.write_queue, a writer worker will handle
  * it
  */
-void schedule_write(int sfd, char *data, unsigned long datalen) {
+void schedule_write(int sfd, char *data, unsigned long datalen, unsigned int heapmem) {
     /* if (send(sfd, data, datalen, 0) < 0) */
     /*     perror("Send data failed"); */
     userdata_t *udata = calloc(1, sizeof(userdata_t));
     udata->fd = sfd;
     udata->data = data;
     udata->size = datalen;
+    udata->heapmem = heapmem;
     enqueue(instance.write_queue, udata);
 }

@@ -29,8 +29,8 @@ queue *create_queue(void) {
     q->len = 0;
     q->front = q->rear = NULL;
     /* Initialize mutex */
-    pthread_mutex_init(&(q->w_mutex), NULL);
-    pthread_cond_init(&(q->w_cond), NULL);
+    pthread_mutex_init(&(q->lock), NULL);
+    pthread_cond_init(&(q->cond), NULL);
 
     return q;
 }
@@ -38,13 +38,13 @@ queue *create_queue(void) {
 
 void release_queue(queue *q) {
     if (q != NULL) {
-        pthread_mutex_lock(&(q->w_mutex));
+        pthread_mutex_lock(&(q->lock));
         while(q->len > 0) {
             dequeue(q);
         }
-        pthread_mutex_unlock(&(q->w_mutex));
-        pthread_mutex_destroy(&(q->w_mutex));
-        pthread_cond_destroy(&(q->w_cond));
+        pthread_mutex_unlock(&(q->lock));
+        pthread_mutex_destroy(&(q->lock));
+        pthread_cond_destroy(&(q->cond));
         free(q);
     }
 }
@@ -53,7 +53,7 @@ void release_queue(queue *q) {
 /* insert data on the rear item */
 void enqueue(queue *q, void *data) {
 
-    pthread_mutex_lock(&(q->w_mutex));
+    pthread_mutex_lock(&(q->lock));
     queue_item *new_item = malloc(sizeof(queue_item));
 
     new_item->next = NULL;
@@ -68,18 +68,18 @@ void enqueue(queue *q, void *data) {
         q->rear = new_item;
     }
 
-    pthread_cond_signal(&(q->w_cond));
-    pthread_mutex_unlock(&(q->w_mutex));
+    pthread_cond_signal(&(q->cond));
+    pthread_mutex_unlock(&(q->lock));
 }
 
 
 /* remove data from the front item and deallocate it */
 void *dequeue(queue* q) {
 
-    pthread_mutex_lock(&(q->w_mutex));
+    pthread_mutex_lock(&(q->lock));
 
     while (q->len == 0)
-        pthread_cond_wait(&(q->w_cond), &(q->w_mutex));
+        pthread_cond_wait(&(q->cond), &(q->lock));
 
     void *item = NULL;
     queue_item *del_item;
@@ -92,7 +92,7 @@ void *dequeue(queue* q) {
         free(del_item);
     q->len--;
 
-    pthread_mutex_unlock(&(q->w_mutex));
+    pthread_mutex_unlock(&(q->lock));
     return item;
 }
 
