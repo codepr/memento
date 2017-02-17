@@ -164,8 +164,6 @@ int connectto(const char *host, const char *port) {
         return -1;
     }
 
-    /* set_nonblocking(sfd); */
-
     return sfd;
 }
 
@@ -181,6 +179,7 @@ static void *reader_worker(void *args) {
     struct worker_epoll *wep = (struct worker_epoll *) args;
     int nfds, done;
 
+    /* Start a local event loop, wait block untill an event is triggered */
     while (1) {
 
         if ((nfds = epoll_wait(wep->efd, wep->events, MAX_EVENTS, -1)) == -1) {
@@ -299,6 +298,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
     /* Start the main event loop, epoll_wait blocks untill an event occur */
     while(1) {
 
+        /* Reset the cycle of the round-robin selection of epoll fds */
         if (cursor == NULL) cursor = ep_list->head;
 
         if ((nfds = epoll_wait(instance.epollfd,
@@ -412,8 +412,6 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
  * it
  */
 void schedule_write(int sfd, char *data, unsigned long datalen, unsigned int heapmem) {
-    /* if (send(sfd, data, datalen, 0) < 0) */
-    /*     perror("Send data failed"); */
     userdata_t *udata = calloc(1, sizeof(userdata_t));
     udata->fd = sfd;
     udata->data = data;
