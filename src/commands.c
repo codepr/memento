@@ -242,7 +242,7 @@ int command_handler(int fd, int from_peer) {
                             len = strlen(S_NIL) + S_OFFSET;
                             break;
                         case COMMAND_NOT_FOUND:
-                            msg = (struct message) {S_UNK, m.fd, 0 };
+                            msg = (struct message) { S_UNK, m.fd, 0 };
                             len = strlen(S_UNK) + S_OFFSET;
                             break;
                         case END:
@@ -251,7 +251,7 @@ int command_handler(int fd, int from_peer) {
                         default:
                             break;
                     }
-                    if (ret != END) {
+                    if (ret != END || ret != 1) {
                         payload = serialize(msg);
                         schedule_write(fd, payload, len, 1);
                         LOG(DEBUG, "Response to peer node\n");
@@ -366,7 +366,6 @@ int process_command(char *buffer, int sfd, int rfd, unsigned int from_peer) {
     for (int i = 0; i < commands_array_len(); i++) {
         if (strncasecmp(command, commands[i], strlen(commands[i])) == 0
                 && strlen(command) == strlen(commands[i])) {
-            /* return (*cmds_func[i])(buffer + strlen(command) + 1); */
             arguments args = {buffer + strlen(command) + 1, sfd, rfd, from_peer };
             return (*cmds_func[i])(args);
         }
@@ -804,8 +803,7 @@ int decf_command(arguments args) {
 int count_command(arguments args) {
     if (instance.store) {
         unsigned long len = instance.store->size;
-        char c_len[16];
-        memset(c_len, 0x00, 16);
+        char *c_len = calloc(1, 16);
         snprintf(c_len, 16, "%lu\n", len);
         if (instance.cluster_mode == 1 && args.fp == 1) {
             /* char response[strlen(c_len) + strlen(self.addr) + strlen(self.name) + 9]; */
@@ -815,7 +813,7 @@ int count_command(arguments args) {
             char *payload = serialize(msg);
             schedule_write(args.sfd, payload, strlen(response) + S_OFFSET, 1);
         } else {
-            schedule_write(args.sfd, c_len, 16, 0);
+            schedule_write(args.sfd, c_len, 16, 1);
         }
     }
     return 1;
@@ -866,7 +864,7 @@ int values_command(arguments args) {
 int keyspace_command(arguments args) {
     if (instance.store) {
         if (instance.store->size > 0) {
-            char *ans = calloc(1, 128); /* provisional size */
+            char *ans = calloc(1, 64); /* provisional size */
             list *spacelist = list_create();
 
             map_iterate2(instance.store, gather_infos, spacelist);
@@ -881,12 +879,14 @@ int keyspace_command(arguments args) {
             }
 
             float fsize = 0.0;
-            if (size >= 1024) fsize = size / 1024;
-            else fsize = size;
-            snprintf(ans, 128, "Keys: %u\nSpace: %f\n", nrkeys, fsize);
-            /* list_release(spacelist); */
+            if (size >= 1024) {
+                fsize = size / 1024;
+                snprintf(ans, 64, "Keys: %u\tSpace: %f Kb\n", nrkeys, fsize);
+            } else {
+                snprintf(ans, 64, "Keys: %u\tSpace: %u B\n", nrkeys, size);
+            }
 
-            if (instance.cluster_mode == 0 && args.fp == 1) {
+            if (instance.cluster_mode == 1 && args.fp == 1) {
                 char *response = calloc(1, strlen(ans) + strlen(self.addr) + strlen(self.name) + 9);
                 sprintf(response, "%s:%s:%d> %s", self.name, self.addr, self.port, ans);
                 struct message msg = { response, args.rfd, 1 };

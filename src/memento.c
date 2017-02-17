@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
 
         while (fgets(line, 256, (FILE *) file) != NULL) {
 
-            char *ip = malloc(15), *pt = malloc(5), *name = malloc(256);
+            char *ip = malloc(15), *pt = malloc(5), *name = calloc(1, 256);
             int self_flag = 0;
             linenr++;
 
