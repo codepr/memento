@@ -81,14 +81,14 @@ int check_command(char *buffer) {
                     || strncasecmp(command, "exit", 4) == 0))
             return END;
 
-        // check if the buffer contains a command and execute it
+        /* check if the buffer contains a valid command */
         for (int i = 0; i < commands_array_len(); i++) {
             if (strncasecmp(command, commands[i], strlen(commands[i])) == 0
                     && strlen(commands[i]) == strlen(command)) {
                 return 1;
             }
         }
-        /* check if the buffer contains a service command and execute it */
+        /* check if the buffer contains a service command */
         for (int i = 0; i < services_array_len(); i++) {
             if (strncasecmp(command, services[i], strlen(services[i])) == 0
                     && strlen(services[i]) == strlen(command)) {
@@ -149,13 +149,11 @@ static int answer(int fd, int resp) {
 
 /*
  * Helper function to route command to the node into which keyspace contains
- * idx
+ * idx, find the node by performing a simple linear search
  */
 static void route_command(int idx, int fd, char *b, struct message *msg) {
-    /*
-     * send the message serialized according to the routing table
-     * cluster
-     */
+    /* Send the message serialized to the right node according the routing
+       table cluster */
     list_node *cursor = instance.cluster->head;
     while(cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
@@ -164,6 +162,8 @@ static void route_command(int idx, int fd, char *b, struct message *msg) {
         if (idx >= n->range_min && idx <= n->range_max) {
             /* check if the range is in the current node */
             if (n->self == 1) {
+                /* commit command directly if the range is handled by the
+                   current node */
                 answer(fd, process_command(b, fd, fd, 0));
                 break;
             } else {
@@ -189,12 +189,12 @@ static void route_command(int idx, int fd, char *b, struct message *msg) {
 int command_handler(int fd, int from_peer) {
 
     struct message msg;
-    char buf[2048];
-    memset(buf, 0x00, 2048);
+    char buf[BUFSIZE];
+    memset(buf, 0x00, BUFSIZE);
     int ret = 0;
 
     /* read data from file descriptor socket */
-    int bytes = recv(fd, buf, 2048, 0);
+    int bytes = recv(fd, buf, BUFSIZE, 0);
 
     if (bytes == -1) {
         if (errno != EAGAIN) ret = 1;

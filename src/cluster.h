@@ -37,14 +37,14 @@ typedef enum { REACHABLE, UNREACHABLE } state;
 
 /* Cluster node structure */
 typedef struct {
-    const char *name;       // node name, a 64 byte len string
-    const char *addr;       // node ip address
-    int port;               // node port
-    int fd;                 // node file descriptor
-    state state;            // current node state in the cluster
-    unsigned int self : 1;  // define if the node is a seed or not
-    unsigned int range_min; // key range lower bound
-    unsigned int range_max; // key range upper bound
+    const char *name;                   // node name, a 64 byte len string
+    const char *addr;                   // node ip address
+    int port;                           // node port
+    int fd;                             // node file descriptor
+    state state;                        // current node state in the cluster
+    unsigned int self : 1;              // define if the node is a seed or not
+    unsigned int range_min;             // key range lower bound
+    unsigned int range_max;             // key range upper bound
 } cluster_node;
 
 /* Global shared state of the system, it represents the distributed map */

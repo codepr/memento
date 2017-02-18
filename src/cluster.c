@@ -25,10 +25,10 @@
 #include "list.h"
 #include "cluster.h"
 
-/* global state store instance */
+/* Global state store instance */
 memento instance;
 
-/* self reference in a cluster context */
+/* Self reference in a cluster context */
 cluster_node self;
 
 
@@ -80,6 +80,7 @@ void cluster_destroy(void) {
     map_release(instance.store);
     list_release(instance.cluster);
     list_release(instance.ingoing);
+    release_queue(instance.write_queue);
 }
 
 
@@ -92,7 +93,8 @@ void cluster_add_node(cluster_node *node) {
 
 
 /*
- * Check if the cluster node is already present in the list
+ * Check if the cluster node is already present in the list, just a linear
+ * search on the cluster nodes list
  */
 int cluster_contained(cluster_node *node) {
     /* Start from head node */
@@ -114,7 +116,8 @@ int cluster_contained(cluster_node *node) {
 
 
 /*
- * Check if the cluster node is already present in the list
+ * Check if the cluster node is already present in the list, just a linear
+ * search on the cluster nodes list
  * FIXME: repeated code
  */
 int cluster_fd_contained(int fd) {
@@ -131,7 +134,7 @@ int cluster_fd_contained(int fd) {
     }
 
     cursor = instance.ingoing->head;
-    while(cursor) {
+    while (cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
         if (n->fd == fd) return 1;
         cursor = cursor->next;
@@ -157,7 +160,7 @@ int cluster_unreachable_count(void) {
     list_node *cursor = instance.cluster->head;
     int count = 0;
 
-    while(cursor) {
+    while (cursor) {
         if (((cluster_node *) cursor->data)->state == UNREACHABLE) count++;
         cursor = cursor->next;
     }
@@ -237,6 +240,7 @@ int cluster_join(const char *host, const char *port) {
     }
     instance.ev.data.fd = n->fd;
 
+    /* Add the descriptor of the new joined node to the global event loop */
     if(epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, n->fd, &instance.ev) == -1) {
         perror("epoll_ctl");
         exit(EXIT_FAILURE);
@@ -247,7 +251,8 @@ int cluster_join(const char *host, const char *port) {
 
 
 /*
- * Balance the cluster by giving a correct key range to every node
+ * Balance the cluster by giving a correct key range to every node, resulting
+ * in a sorted list of balanced nodes
  */
 void cluster_balance(void) {
 
@@ -278,3 +283,5 @@ void cluster_balance(void) {
 void cluster_set_selfname(const char *name) {
     self.name = strdup(name);
 }
+
+

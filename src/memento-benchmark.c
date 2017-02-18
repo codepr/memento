@@ -46,6 +46,7 @@ static void *make_requests(void *t) {
     char real_keys[requests][16];
     char buf[5];
     float time_elapsed, start_time, end_time, result;
+    int size = 0;
 
     for (int j = 0; j < requests; ++j)
         snprintf(real_keys[j], 16, "set %d value\r\n", j);
@@ -57,7 +58,8 @@ static void *make_requests(void *t) {
     char *cmd = "set keyone valueone\r\n";
     start_time = (float) clock()/CLOCKS_PER_SEC;
     for (int i = 0; i < requests; ++i) {
-        if (send(fd, cmd, strlen(cmd), 0) < 0)
+        size = strlen(cmd);
+        if (send_all(fd, cmd, &size) < 0)
             perror("send");
         if (read(fd, buf, 5) < 0)
             perror("read");
@@ -78,7 +80,8 @@ static void *make_requests(void *t) {
     char *get = "get keyone\r\n";
     start_time = (float) clock()/CLOCKS_PER_SEC;
     for (int i = 0; i < requests; ++i) {
-        if (send(fd, get, strlen(get), 0) < 0)
+        size = strlen(get);
+        if (send_all(fd, get, &size) < 0)
             perror("send");
         if (read(fd, getr, 10) < 0)
             perror("read");
@@ -95,7 +98,8 @@ static void *make_requests(void *t) {
 
     start_time = (float) clock()/CLOCKS_PER_SEC;
     for (int i = 0; i < requests; ++i) {
-        if (send(fd, real_keys[i], strlen(real_keys[i]), 0) < 0)
+        size = strlen(real_keys[i]);
+        if (send_all(fd, real_keys[i], &size) < 0)
             perror("send");
         if (read(fd, buf, 5) < 0)
             perror("read");
@@ -128,6 +132,7 @@ int main(int argc, char **argv) {
     char real_keys[100000][18];
     char buf[5];
     float time_elapsed, start_time, end_time, result;
+    int size = 0;
 
     printf("\n");
     printf(" Nr. operations %d\n\n", 100000);
@@ -147,7 +152,8 @@ int main(int argc, char **argv) {
     char *cmd = "set keyone valueone\r\n";
     start_time = (float) clock()/CLOCKS_PER_SEC;
     for (int i = 0; i < 100000; ++i) {
-        if (send(fd, cmd, strlen(cmd), 0) < 0)
+        size = strlen(cmd);
+        if (send_all(fd, cmd, &size) < 0)
             perror("send");
         if (read(fd, buf, 5) < 0)
             perror("read");
@@ -169,7 +175,8 @@ int main(int argc, char **argv) {
     char *get = "get keyone\r\n";
     start_time = (float) clock()/CLOCKS_PER_SEC;
     for (int i = 0; i < 100000; ++i) {
-        if (send(fd, get, strlen(get), 0) < 0)
+        size = strlen(get);
+        if (send_all(fd, get, &size) < 0)
             perror("send");
         if (read(fd, getr, 10) < 0)
             perror("read");
@@ -187,7 +194,8 @@ int main(int argc, char **argv) {
 
     start_time = (float) clock()/CLOCKS_PER_SEC;
     for (int i = 0; i < 100000; ++i) {
-        if (send(fd, real_keys[i], 18, 0) < 0)
+        size = 18;
+        if (send_all(fd, real_keys[i], &size) < 0)
             perror("send");
         if (read(fd, buf, 5) < 0)
             perror("read");
@@ -210,7 +218,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < thread_nr; ++i) {
         if (pthread_create(&th[i], NULL, make_requests, &conn) < 0)
             perror("pthread");
-        usleep(10000); // 10 ms interval
+        usleep(15000); // 10 ms interval
     }
 
     for (int i = 0; i < thread_nr; ++i)

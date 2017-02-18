@@ -40,6 +40,27 @@
 #include "util.h"
 
 
+
+int send_all(int sfd, char *buf, int *len) {
+
+    int total = 0;
+    int bytesleft = *len;
+    int n;
+
+    while (total < *len) {
+        n = send(sfd, buf + total, bytesleft, 0);
+        if (n == -1) break;
+        total += n;
+        bytesleft -= n;
+    }
+
+    *len = total;
+
+    return n == -1 ? -1 : 0;
+}
+
+
+
 /* Set non-blocking socket */
 int set_nonblocking(int fd) {
     int flags, result;
@@ -202,6 +223,8 @@ static void *reader_worker(void *args) {
             }
         }
     }
+
+    free(wep);
     return NULL;
 }
 
@@ -215,11 +238,13 @@ static void *writer_worker(void *args) {
 
     userdata_t *udata = NULL;
 
+    /* Polling loop, dequeue call will block if there're no elements present
+       inside */
     while(1) {
 
         udata = (userdata_t *) dequeue(instance.write_queue);
 
-        if (send(udata->fd, udata->data, udata->size, 0) < 0)
+        if (send_all(udata->fd, udata->data, (int *) &udata->size) < 0)
             perror("Send data failed");
 
         /* Check if struct udata contains allocated memory */
@@ -314,7 +339,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 /* An error has occured on this fd, or the socket is not
                    ready for reading */
                 perror ("epoll error");
-                close (instance.evs[i].data.fd);
+                close(instance.evs[i].data.fd);
                 continue;
             }
             /* If fdescriptor is main server or bus server add it to worker
@@ -325,7 +350,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 if ((client = accept(instance.evs[i].data.fd,
                                 (struct sockaddr *) &addr, &addrlen)) == -1) {
                     perror("accept");
-                    exit(EXIT_FAILURE);
+                    close(instance.evs[i].data.fd);
                 }
 
                 set_nonblocking(client);
@@ -378,7 +403,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                     } else if (cluster_reachable(new_node) == 0) {
                         /* set the node already present to state REACHABLE */
                         if (cluster_set_state(new_node, REACHABLE) == 0)
-                            LOG(DEBUG, "[!] Failed to set node located at %s:%s to state REACHABLE",
+                            LOG(DEBUG, "Failed to set node located at %s:%s to state REACHABLE",
                                     hbuf, sbuf);
                         else LOG(DEBUG, "Node %s:%s is now REACHABLE\n", hbuf, sbuf);
                     } else free(new_node); // the node is already present and REACHABLE
@@ -408,8 +433,8 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
 
 
 /*
- * Add userdata_t structure to the instance.write_queue, a writer worker will handle
- * it
+ * Add userdata_t structure to the global.write queue, a writer worker will
+ * handle it
  */
 void schedule_write(int sfd, char *data, unsigned long datalen, unsigned int heapmem) {
     userdata_t *udata = calloc(1, sizeof(userdata_t));

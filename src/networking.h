@@ -27,7 +27,7 @@
 
 
 #define MAX_EVENTS (64)
-#define MAX_DATA_SIZE (10485760)
+#define BUFSIZE (2048)
 
 
 /*
@@ -58,6 +58,7 @@ struct worker_epoll {
 
 
 
+int send_all(int, char *, int *);
 int set_nonblocking(int);
 int listento(const char *, const char *);
 int connectto(const char *, const char *);
