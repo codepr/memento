@@ -203,7 +203,7 @@ static void *reader_worker(void *args) {
     /* Start a local event loop, wait block untill an event is triggered */
     while (1) {
 
-        if ((nfds = epoll_wait(wep->efd, wep->events, MAX_EVENTS, -1)) == -1) {
+        if ((nfds = epoll_wait(wep->efd, wep->events, MAX_EVENTS, 100)) == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
         }
@@ -327,7 +327,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
         if (cursor == NULL) cursor = ep_list->head;
 
         if ((nfds = epoll_wait(instance.epollfd,
-                        instance.evs, MAX_EVENTS, -1)) == -1) {
+                        instance.evs, MAX_EVENTS, 100)) == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
         }

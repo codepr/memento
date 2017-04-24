@@ -61,7 +61,7 @@ create 3 configuration file as the previous example just run (all on the same
 machine, but can be easily used to generate configurations for different nodes
 in a LAN):
 
-    $ python build_cluster.py 127.0.0.1 8081 127.0.0.1 8082 127.0.0.1 8083
+    $ python build_cluster.py 127.0.0.1:8081 127.0.0.1:8082 127.0.0.1:8083
 
 This instruction will generate files `node0.conf`, `node1.conf` and
 `node2.conf` containing each the right configuration. It can be renamed to
