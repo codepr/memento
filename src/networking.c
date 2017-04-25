@@ -101,7 +101,7 @@ static int create_and_bind(const char *host, const char *port) {
 
         /* set SO_REUSEADDR so the socket will be reusable after process kill */
         if (setsockopt(sfd, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR),
-                    &(int){ 1 }, sizeof(int)) < 0)
+                    &(int) { 1 }, sizeof(int)) < 0)
             perror("SO_REUSEADDR");
 
         if ((bind(sfd, rp->ai_addr, rp->ai_addrlen)) == 0) {
@@ -189,68 +189,71 @@ int connectto(const char *host, const char *port) {
 }
 
 
+static int epoll_fd;
 
 
-/*
- * Basic reader worker function, it's responsibility is to start his own event
- * loop and wait for events EPOLLIN on monitored descriptors
- */
-static void *reader_worker(void *args) {
+static void *worker(void *args) {
 
-    struct worker_epoll *wep = (struct worker_epoll *) args;
-    int nfds, done;
+    int done = 0;
+    struct epoll_event *events = calloc(MAX_EVENTS, sizeof(*events));
+    if (events == NULL) {
+        perror("calloc(3) failed when attempting to allocate events buffer");
+        pthread_exit(NULL);
+    }
 
-    /* Start a local event loop, wait block untill an event is triggered */
-    while (1) {
+    int events_cnt;
+    userdata_t *udata = NULL;
+    while ((events_cnt = epoll_wait(epoll_fd, events, MAX_EVENTS, -1)) > 0) {
+        for (int i = 0; i < events_cnt; i++) {
 
-        if ((nfds = epoll_wait(wep->efd, wep->events, MAX_EVENTS, 100)) == -1) {
-            perror("epoll_wait");
-            exit(EXIT_FAILURE);
-        }
+            //assert(events[i].events & EPOLLIN);
 
-        for (int i = 0; i < nfds; ++i) {
-
-            if (wep->events[i].events & EPOLLIN) {
+            if (events[i].events & EPOLLIN) {
                 /* There's some data to be processed */
-                if (wep->events[i].data.fd < 0)
+                if (events[i].data.fd < 0)
                     continue;
-                done = command_handler(wep->events[i].data.fd, 0);
+                done = command_handler(events[i].data.fd, 0);
                 if (done == END || done == 1) {
                     /* close the connection */
                     LOG(DEBUG, "Closing connection\n");
-                    close(wep->events[i].data.fd);
+                    close(events[i].data.fd);
                 }
+            } else if (events[i].events & EPOLLOUT) {
+                udata = (userdata_t *) events[i].data.ptr;
+
+                if (send_all(udata->fd, udata->data, (int *) &udata->size) < 0)
+                    perror("Send data failed");
+
+                struct epoll_event epevent;
+                epevent.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                epevent.data.fd = udata->fd;
+
+                //if (udata->buscomm == 1) {
+                //    if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
+                //        perror("epoll_ctl(2) failed attempting to mod client");
+                //        close(udata->fd);
+                //    }
+                //} else {
+                if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
+                    perror("epoll_ctl(2) failed attempting to mod client");
+                    close(udata->fd);
+                }
+                //}
+
+                /* Check if struct udata contains allocated memory */
+                if (udata->heapmem == 1) free(udata->data);
+                free(udata);
             }
         }
     }
 
-    free(wep);
-    return NULL;
-}
-
-
-/*
- * Basic writer worker function, it's responsibility is to poll data from the
- * write queue for write scheduled data and send it out, releasing the
- * allocated memory
- */
-static void *writer_worker(void *args) {
-
-    userdata_t *udata = NULL;
-
-    /* Polling loop, dequeue call will block if there're no elements present
-       inside */
-    while(1) {
-
-        udata = (userdata_t *) dequeue(instance.write_queue);
-
-        if (send_all(udata->fd, udata->data, (int *) &udata->size) < 0)
-            perror("Send data failed");
-
-        /* Check if struct udata contains allocated memory */
-        if (udata->heapmem == 1) free(udata->data);
-        free(udata);
+    if (events_cnt == 0) {
+        fprintf(stderr, "epoll_wait(2) returned 0, but timeout was not specified...?");
+    } else {
+        perror("epoll_wait(2) error");
     }
+
+    free(events);
 
     return NULL;
 }
@@ -274,33 +277,26 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
     int client;
     struct sockaddr addr;
     socklen_t addrlen = sizeof addr;
-    list *ep_list = list_create();
 
     /* Number of worker and writer threads to create, should be tweaked basing
        on the number of the physical cores provided by the CPU */
-    int poolnr = 2;
+    int poolnr = 20;
     /* worker thread pool */
-    pthread_t readers[poolnr];
-    pthread_t writers[poolnr];
+    pthread_t workers[poolnr];
+    userdata_t *udata = NULL;
+
+    if ((epoll_fd = epoll_create(1)) < 0) {
+        perror("epoll_create(2) failed");
+        exit(EXIT_FAILURE);
+    }
 
     /* I/0 thread pool initialization, allocating a worker_epool structure for
        each one. A worker_epool structure is formed of an epoll descriptor and
        his event queue. Every  worker_epoll is added to a list, in order to
        reuse them in the event loop to add connecting descriptors in a round
        robin scheduling */
-    for (int i = 0; i < poolnr; ++i) {
-        struct epoll_event event;
-        struct epoll_event *events = calloc(MAX_EVENTS, sizeof(*events));
-        int efd = epoll_create1(0);
-        event.events = EPOLLIN | EPOLLET;
-        struct worker_epoll *wp = calloc(1, sizeof(*wp));
-        wp->efd = efd;
-        wp->event = event;
-        wp->events = events;
-        list_head_insert(ep_list, wp);
-        pthread_create(&writers[i], NULL, writer_worker, NULL);
-        pthread_create(&readers[i], NULL, reader_worker, wp);
-    }
+    for (int i = 0; i < poolnr; ++i)
+        pthread_create(&workers[i], NULL, worker, NULL);
 
     int nfds;
 
@@ -309,7 +305,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
        responsible for the communication between nodes (bus) */
     for (int n = 0; n < len; ++n) {
         instance.ev.data.fd = fds[n];
-        instance.ev.events = EPOLLIN | EPOLLET;
+        instance.ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
         if(epoll_ctl(instance.epollfd,
                     EPOLL_CTL_ADD, fds[n], &instance.ev) == -1) {
             perror("epoll_ctl");
@@ -317,17 +313,16 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
         }
     }
 
-    list_node *cursor = ep_list->head;
-    struct worker_epoll *wep = NULL;
+    //list_node *cursor = ep_list->head;
+    //struct worker_epoll *wep = NULL;
 
     /* Start the main event loop, epoll_wait blocks untill an event occur */
-    while(1) {
+    while (1) {
 
         /* Reset the cycle of the round-robin selection of epoll fds */
-        if (cursor == NULL) cursor = ep_list->head;
 
         if ((nfds = epoll_wait(instance.epollfd,
-                        instance.evs, MAX_EVENTS, 100)) == -1) {
+                        instance.evs, MAX_EVENTS, -1)) == -1) {
             perror("epoll_wait");
             exit(EXIT_FAILURE);
         }
@@ -358,16 +353,26 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 /* Client connection check, this case must add the descriptor
                    to the next worker thread in the list */
                 if (instance.evs[i].data.fd == fds[0]) {
-                    wep = (struct worker_epoll *) cursor->data;
 
-                    wep->event.events = EPOLLIN | EPOLLET;
-                    wep->event.data.fd = client;
+                    struct epoll_event epevent;
+                    epevent.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                    epevent.data.fd = client;
 
-                    if (epoll_ctl(wep->efd, EPOLL_CTL_ADD, client, &wep->event) == -1) {
-                        perror("epoll_ctl: client connection");
+                    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client, &epevent) < 0) {
+                        perror("epoll_ctl(2) failed attempting to add new client");
+                        close(client);
+                        return -1;
                     }
 
-                    cursor = cursor->next; /* round-robin like distribution */
+                    struct epoll_event epevent2;
+                    epevent2.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                    epevent2.data.fd = fds[0];
+
+                    if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, fds[0], &epevent2) < 0) {
+                        perror("epoll_ctl(2) failed attempting to add new client");
+                        close(fds[0]);
+                        return -1;
+                    }
 
                     LOG(DEBUG, "Client connected\r\n");
                 }
@@ -377,7 +382,7 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                    global epoll instance */
                 if (instance.evs[i].data.fd == fds[1]) {
 
-                    instance.ev.events = EPOLLIN | EPOLLET;
+                    instance.ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
                     instance.ev.data.fd = client;
 
                     if (epoll_ctl(instance.epollfd,
@@ -425,6 +430,32 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                         break;
                     }
                 }
+            } else if (instance.evs[i].events & EPOLLOUT) {
+                udata = (userdata_t *) instance.evs[i].data.ptr;
+
+                if (send_all(udata->fd, udata->data, (int *) &udata->size) < 0)
+                    perror("Send data failed");
+
+                struct epoll_event epevent;
+                epevent.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                epevent.data.fd = udata->fd;
+
+                if (udata->buscomm == 1) {
+                    if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
+                        perror("epoll_ctl(2) failed attempting to mod client");
+                        close(udata->fd);
+                    }
+                } else {
+                    if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
+                        perror("epoll_ctl(2) failed attempting to mod client");
+                        close(udata->fd);
+                    }
+                }
+
+                /* Check if struct udata contains allocated memory */
+                if (udata->heapmem == 1) free(udata->data);
+                free(udata);
+
             }
         }
     }
@@ -436,11 +467,27 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
  * Add userdata_t structure to the global.write queue, a writer worker will
  * handle it
  */
-void schedule_write(int sfd, char *data, unsigned long datalen, unsigned int heapmem) {
+void schedule_write(int sfd, char *data, unsigned long datalen, unsigned int heapmem, unsigned int buscomm) {
     userdata_t *udata = calloc(1, sizeof(userdata_t));
     udata->fd = sfd;
     udata->data = data;
     udata->size = datalen;
     udata->heapmem = heapmem;
-    enqueue(instance.write_queue, udata);
+    udata->buscomm = buscomm;
+    struct epoll_event epevent;
+    epevent.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
+    epevent.data.fd = sfd;
+    epevent.data.ptr = udata;
+
+    if (buscomm == 1) {
+        if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, sfd, &epevent) < 0) {
+            perror("epoll_ctl(2) failed attempting to mod client");
+            close(sfd);
+        }
+    } else {
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, sfd, &epevent) < 0) {
+            perror("epoll_ctl(2) failed attempting to mod client");
+            close(sfd);
+        }
+    }
 }

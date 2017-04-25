@@ -46,6 +46,7 @@ typedef struct userdata {
     int fd;
     unsigned int size;        // real received data size
     unsigned int heapmem : 1;
+    unsigned int buscomm : 1;
     char *data;
 } userdata_t;
 
@@ -63,6 +64,6 @@ int set_nonblocking(int);
 int listento(const char *, const char *);
 int connectto(const char *, const char *);
 int event_loop(int *, size_t, fd_handler);
-void schedule_write(int, char *, unsigned long, unsigned int);
+void schedule_write(int, char *, unsigned long, unsigned int, unsigned int);
 
 #endif
