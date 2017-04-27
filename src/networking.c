@@ -228,20 +228,13 @@ static void *worker(void *args) {
                 epevent.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
                 epevent.data.fd = udata->fd;
 
-                //if (udata->buscomm == 1) {
-                //    if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
-                //        perror("epoll_ctl(2) failed attempting to mod client");
-                //        close(udata->fd);
-                //    }
-                //} else {
                 if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
                     perror("epoll_ctl(2) failed attempting to mod client");
                     close(udata->fd);
                 }
-                //}
 
                 /* Check if struct udata contains allocated memory */
-                if (udata->heapmem == 1) free(udata->data);
+                if (udata->alloc == 1) free(udata->data);
                 free(udata);
             }
         }
@@ -312,9 +305,6 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
             exit(EXIT_FAILURE);
         }
     }
-
-    //list_node *cursor = ep_list->head;
-    //struct worker_epoll *wep = NULL;
 
     /* Start the main event loop, epoll_wait blocks untill an event occur */
     while (1) {
@@ -429,8 +419,21 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                         close(instance.evs[i].data.fd);
                         break;
                     }
+                    //else {
+                    //    struct epoll_event epevent2;
+                    //    epevent2.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                    //    epevent2.data.fd = instance.evs[i].data.fd;
+
+                    //    if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, instance.evs[i].data.fd, &epevent2) < 0) {
+                    //        perror("epoll_ctl(2) failed attempting to add new client");
+                    //        close(fds[0]);
+                    //        return -1;
+                    //    }
+
+                    //}
                 }
-            } else if (instance.evs[i].events & EPOLLOUT) {
+            }
+            else if (instance.evs[i].events & EPOLLOUT) {
                 udata = (userdata_t *) instance.evs[i].data.ptr;
 
                 if (send_all(udata->fd, udata->data, (int *) &udata->size) < 0)
@@ -440,20 +443,20 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
                 epevent.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
                 epevent.data.fd = udata->fd;
 
-                if (udata->buscomm == 1) {
+                //if (udata->buscomm == 1) {
                     if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
                         perror("epoll_ctl(2) failed attempting to mod client");
                         close(udata->fd);
                     }
-                } else {
-                    if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
-                        perror("epoll_ctl(2) failed attempting to mod client");
-                        close(udata->fd);
-                    }
-                }
+                //} else {
+                //    if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, udata->fd, &epevent) < 0) {
+                //        perror("epoll_ctl(2) failed attempting to mod client");
+                //        close(udata->fd);
+                //    }
+                //}
 
                 /* Check if struct udata contains allocated memory */
-                if (udata->heapmem == 1) free(udata->data);
+                if (udata->alloc == 1) free(udata->data);
                 free(udata);
 
             }
@@ -467,23 +470,37 @@ int event_loop(int *fds, size_t len, fd_handler handler_ptr) {
  * Add userdata_t structure to the global.write queue, a writer worker will
  * handle it
  */
-void schedule_write(int sfd, char *data, unsigned long datalen, unsigned int heapmem, unsigned int buscomm) {
+void schedule_write(int sfd, char *data, unsigned long datalen, unsigned int alloc) {
     userdata_t *udata = calloc(1, sizeof(userdata_t));
     udata->fd = sfd;
     udata->data = data;
     udata->size = datalen;
-    udata->heapmem = heapmem;
-    udata->buscomm = buscomm;
+    udata->alloc = alloc;
+
     struct epoll_event epevent;
     epevent.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
-    epevent.data.fd = sfd;
     epevent.data.ptr = udata;
+//    epevent.data.fd = sfd;
 
-    if (buscomm == 1) {
-        if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, sfd, &epevent) < 0) {
-            perror("epoll_ctl(2) failed attempting to mod client");
+    if (cluster_fd_contained(sfd) && sfd != self.fd) {
+
+//        if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, sfd, &epevent) < 0)
+//            perror("epoll_ctl(2) mod");
+
+        if (send_all(sfd, data, (int *) &datalen) < 0)
+            perror("Send data failed");
+
+        struct epoll_event epevent2;
+        epevent2.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+        epevent2.data.fd = sfd;
+
+        if (epoll_ctl(instance.epollfd, EPOLL_CTL_MOD, sfd, &epevent2) < 0) {
+            perror("epoll_ctl(2) failed attempting to add new client");
             close(sfd);
         }
+        /* Check if struct udata contains allocated memory */
+        if (alloc == 1) free(data);
+
     } else {
         if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, sfd, &epevent) < 0) {
             perror("epoll_ctl(2) failed attempting to mod client");
