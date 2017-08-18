@@ -55,5 +55,8 @@ void remove_newline(char *);
 void s_log(loglevel, const char *, ...);
 
 #define LOG(...) s_log( __VA_ARGS__ )
+#define DEBUG(...) LOG(DEBUG, __VA_ARGS__)
+#define ERROR(...) LOG(ERR, __VA_ARGS__)
+#define INFO(...) LOG(INFO, __VA_ARGS__)
 
 #endif

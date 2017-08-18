@@ -1,6 +1,13 @@
 * CHANGELOG
 =========================================
 
+2017-08-10
+
+- Fixed some problems regarding EPOLLET with a threadpool, using EPOLLONESHOT to
+  manually rearm socket descriptor at every event, at the cost of an additional
+  system call
+- Refactored command handling, trying to decouple a bit more modules
+
 2017-02-11
 
 - Fixed some bugs

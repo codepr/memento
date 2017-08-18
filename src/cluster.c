@@ -1,28 +1,30 @@
 /*
  * Copyright (c) 2016-2017 Andrea Giacomo Baldan
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  */
 
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
 #include "list.h"
+#include "event.h"
 #include "cluster.h"
 
 /* Global state store instance */
@@ -36,39 +38,29 @@ cluster_node self;
  * Initialize the global shared structure, representing the cluster and the
  * store itself
  */
-int cluster_init(int distributed, const char *id, const char *host, const char *port) {
+void init_system(int distributed, const char *id,
+		const char *host, char *server_port, char *cluster_port) {
 
     /* Initialize instance containers */
     instance.cluster_mode = distributed;
     instance.store = map_create();
     instance.cluster = list_create();
-    instance.ingoing = list_create();
-    instance.write_queue = create_queue();
     instance.log_level = DEBUG;
 
-    /* initialized global epollfd */
-    instance.ev.events = EPOLLIN | EPOLLET;
-    if ((instance.epollfd = epoll_create1(0)) == -1) {
-        perror("epoll_create1");
-        exit(EXIT_FAILURE);
-    }
+	init_event_loop(host, server_port, cluster_port);
 
     /* check for distribution */
     if (distributed == 1) {
-
         /* Initialize self reference */
         self.state = REACHABLE;
         self.self = 1;
         self.addr = host;
-        self.port = GETINT(port);
+        self.port = GETINT(cluster_port);
         self.name = id;
-
         /* lock for incoming connection, till the cluster is formed and ready */
         instance.lock = 1;
-    } else instance.lock = 0;
-    if (instance.store != NULL)
-        return 0;
-    else return -1;
+    }
+	else instance.lock = 0;
 }
 
 
@@ -79,8 +71,6 @@ void cluster_destroy(void) {
     /* deallocate instance containers */
     map_release(instance.store);
     list_release(instance.cluster);
-    list_release(instance.ingoing);
-    release_queue(instance.write_queue);
 }
 
 
@@ -116,35 +106,6 @@ int cluster_contained(cluster_node *node) {
 
 
 /*
- * Check if the cluster node is already present in the list, just a linear
- * search on the cluster nodes list
- * FIXME: repeated code
- */
-int cluster_fd_contained(int fd) {
-    /* Start from head node */
-    list_node *cursor = instance.cluster->head;
-    /* cycle till cursor != NULL */
-    while (cursor) {
-        cluster_node *n = (cluster_node *) cursor->data;
-        if (n->fd == fd) {
-            /* found a match */
-            return 1;
-        }
-        cursor = cursor->next; // move the pointer forward
-    }
-
-    cursor = instance.ingoing->head;
-    while (cursor) {
-        cluster_node *n = (cluster_node *) cursor->data;
-        if (n->fd == fd) return 1;
-        cursor = cursor->next;
-    }
-    /* node is not present */
-    return 0;
-}
-
-
-/*
  * Checks if the cluster node is in a REACHABLE state
  */
 int cluster_reachable(cluster_node *node) {
@@ -170,6 +131,7 @@ int cluster_unreachable_count(void) {
 
 /*
  * Sets the cluster node contained in the cluster list to state st
+ * instance.
  */
 int cluster_set_state(cluster_node *node, state st) {
     /* Start from head node */
@@ -194,7 +156,7 @@ int cluster_set_state(cluster_node *node, state st) {
  * Return the associated cluster node to the host and port specified
  * FIXME: repeated code
  */
-cluster_node *cluster_get_node(const char *host, const char *port) {
+cluster_node *cluster_get_node(const char *host, char *port) {
     /* Start from head node */
     list_node *cursor = instance.cluster->head;
     /* cycle till cursor != NULL */
@@ -209,17 +171,17 @@ cluster_node *cluster_get_node(const char *host, const char *port) {
     }
     /* node is not present */
     return NULL;
-
 }
 
 
 /*
  * Add a node to the cluster by adding it to the cluster list of nodes
  */
-int cluster_join(const char *host, const char *port) {
+int cluster_join(const char *host, char *port) {
     int fd;
     if ((fd = connectto(host, port)) == -1) {
-        LOG(ERR, "Impossible connection to %s:%s\n", host, port);
+        //ERROR("Impossible connection to %s:%s\n", host, port);
+		ERROR("Awaiting for peer %s:%s to accept connection\n", host, port);
         return -1;
     }
     /* If cluster node is present set the file descriptor */
@@ -238,14 +200,7 @@ int cluster_join(const char *host, const char *port) {
         instance.cluster =
             list_head_insert(instance.cluster, new_node);
     }
-    instance.ev.data.fd = n->fd;
-
-    /* Add the descriptor of the new joined node to the global event loop */
-    if(epoll_ctl(instance.epollfd, EPOLL_CTL_ADD, n->fd, &instance.ev) == -1) {
-        perror("epoll_ctl");
-        exit(EXIT_FAILURE);
-    }
-
+    ADD_FD(instance.el.epollfd, fd);
     return 1;
 }
 
@@ -283,5 +238,3 @@ void cluster_balance(void) {
 void cluster_set_selfname(const char *name) {
     self.name = strdup(name);
 }
-
-

@@ -1,22 +1,23 @@
 /*
  * Copyright (c) 2016-2017 Andrea Giacomo Baldan
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  */
 
 #include <stdio.h>
@@ -28,7 +29,6 @@
 #include <time.h>
 #include "util.h"
 #include "cluster.h"
-#include "commands.h"
 #include "networking.h"
 
 
@@ -45,12 +45,12 @@ static void *form_cluster_thread(void *p) {
 
         list_node *cursor = instance.cluster->head;
 
-        while(cursor) {
+        while (cursor) {
             /* count for UNREACHABLE nodes */
             len = cluster_unreachable_count();
             cluster_node *n = (cluster_node *) cursor->data;
             if (cluster_reachable(n) == 0) {
-                LOG(DEBUG, "Trying to connect to cluster node %s:%d\n",
+                DEBUG("Trying to connect to cluster node %s:%d\n",
                         n->addr, n->port);
                 char p[5];
                 sprintf(p, "%d", n->port);
@@ -64,16 +64,18 @@ static void *form_cluster_thread(void *p) {
         sleep(3);
     }
 
-    LOG(DEBUG, "Cluster node succesfully joined to the cluster\n");
+    DEBUG("Cluster node succesfully joined to the cluster\n");
     cluster_balance();
-    LOG(DEBUG, "All cluster nodes are balanced\n");
+    //DEBUG("All cluster nodes are balanced\n");
+	DEBUG("Keyspace correctly balanced\n");
     // debug check
     // FIXME: remove
     list_node *cursor = instance.cluster->head;
-    while(cursor) {
+    while (cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
-        LOG(DEBUG, "Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
-                n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
+		DEBUG("%s:%d -> [%u,%u]\n", n->addr, n->port, n->range_min, n->range_max);
+        //DEBUG("Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
+        //        n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
         cursor = cursor->next;
     }
     LOG(INFO, "Cluster succesfully formed\n");
@@ -127,23 +129,12 @@ int main(int argc, char **argv) {
     int bport = GETINT(port) + 100;
     sprintf(bus_port, "%d", bport);
 
-    /* initialize two sockets:
-     * - one for incoming client connections
-     * - a second for intercommunication between nodes
-     */
-    int sockets[2] = {
-        listento(address, port),
-        listento(address, bus_port)
-    };
-
-
-    /* handler function for incoming data */
-    fd_handler handler_ptr = &command_handler;
-
     /* If cluster mode is enabled Initialize cluster map */
     if (cluster_mode == 1) {
 
-        cluster_init(1, id, address, bus_port);
+		INFO("Cluster mode started, reading configuration\n");
+
+		init_system(1, id, address, port, bus_port);
 
         /* read cluster configuration */
         FILE *file = fopen(filename, "r");
@@ -170,7 +161,7 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            LOG(DEBUG, "[CFG] Line %d: IP %s PORT %s NAME %s SELF %d\n",
+            DEBUG("[CFG] Line %d: IP %s PORT %s NAME %s SELF %d\n",
                     linenr, ip, pt, name, self_flag);
 
             /* create a new node and add it to the list */
@@ -197,7 +188,6 @@ int main(int argc, char **argv) {
 
             /* add the node to the cluster list */
             cluster_add_node(new_node);
-
         }
 
         fclose(file);
@@ -209,11 +199,10 @@ int main(int argc, char **argv) {
     } else {
 
         /* single node mode */
-        cluster_init(0, id, address, bus_port);
+		init_system(0, id, address, port, bus_port);
     }
 
     /* start the main listen loop */
-    event_loop(sockets, 2, handler_ptr);
-
+	start_loop();
     return 0;
 }

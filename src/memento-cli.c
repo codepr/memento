@@ -147,10 +147,6 @@ void help(void) {
     printf("                            <key>, like key, value, creation time and expire time\n");
     printf("APPEND key value            Append <value> to <key>\n");
     printf("PREPEND key value           Prepend <value> to <key>\n");
-    printf("KEYS                        List all keys stored into the keyspace\n");
-    printf("VALUES                      List all values stored into the keyspace\n");
-    printf("COUNT                       Return the number of key-value pair stored\n");
-    printf("KEYSPACE                    Get some informations on the distribution of the keyspace and occupied space\n");
     printf("FLUSH                       Delete all maps stored inside partitions\n");
     printf("QUIT/EXIT                   Close connection\n");
     printf("\n");
