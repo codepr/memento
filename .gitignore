@@ -1,7 +1,6 @@
 release
-conf
-shibui
-shibui-cli
+__pycache__
+*.pyc
 *.d
 *.o
 *.ko

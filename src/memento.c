@@ -110,6 +110,7 @@ int main(int argc, char **argv) {
                 break;
             case 'f':
                 filename = optarg;
+                cluster_mode = 1;
                 break;
             default:
                 cluster_mode = 0;
@@ -161,10 +162,16 @@ int main(int argc, char **argv) {
             DEBUG("[CFG] Line %d: IP %s PORT %s NAME %s SELF %d\n",
                     linenr, ip, pt, name, self_flag);
 
+            if (GETINT(pt) > 65435) {
+                fprintf(stderr, "[CFG] - Port must be at lesser than or equal to 65435\n");
+                exit(EXIT_FAILURE);
+            }
+
+
             /* create a new node and add it to the list */
             cluster_node *new_node = shb_malloc(sizeof(cluster_node));
             new_node->addr = ip;
-            new_node->port = GETINT(pt);
+            new_node->port = GETINT(pt) + 100;
             new_node->state = UNREACHABLE;
 
             if (self_flag == 1) {

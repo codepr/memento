@@ -1,6 +1,11 @@
 * CHANGELOG
 =========================================
 
+2017-12-25
+
+- Fixed a bug that prevented cluster forming correctly and addressing of keys toward
+  external nodes
+
 2017-08-10
 
 - Fixed some problems regarding EPOLLET with a threadpool, using EPOLLONESHOT to
