@@ -116,7 +116,7 @@ good results. Using a Linux box with an Intel(R) Core(TM) i5-4210U CPU @
  1) SET keyone valueone
  2) GET keyone
  3) SET with growing keys
- 4) All previous operations in 10 threads, each one performing 2000 requests per type
+ 4) All previous operations in 10 threads, each one performing 8000 requests per type
 
  [SET] - Elapsed time: 0.871047 s  Op/s: 114804.37
  [GET] - Elapsed time: 0.889411 s  Op/s: 112433.95
@@ -145,7 +145,15 @@ development and testing.
 
 ### Changelog
 
-Seethe [CHANGELOG](CHANGELOG) file.
+See the [CHANGELOG](CHANGELOG) file.
+
+### TODO
+
+- [ ] Implementation of a real consistent-hashing ring
+- [ ] Runtime nodes joining and rebalance of the cluster
+- [ ] Implementation of a basic gossip protocol to spread cluster state
+- [ ] Implementation of redundancy (e.g. slave nodes)
+
 
 ### License
 
