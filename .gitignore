@@ -1,4 +1,4 @@
-release
+bin
 __pycache__
 *.pyc
 *.d
