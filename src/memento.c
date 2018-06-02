@@ -66,7 +66,6 @@ static void *form_cluster_thread(void *p) {
 
     DEBUG("Cluster node succesfully joined to the cluster\n");
     cluster_balance();
-    //DEBUG("All cluster nodes are balanced\n");
 	DEBUG("Keyspace correctly balanced\n");
     // debug check
     // FIXME: remove
@@ -74,8 +73,6 @@ static void *form_cluster_thread(void *p) {
     while (cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
 		DEBUG("%s:%d -> [%u,%u]\n", n->addr, n->port, n->range_min, n->range_max);
-        //DEBUG("Node: %s:%d - Min: %u Max: %u Name: %s Fd: %d\n",
-        //        n->addr, n->port, n->range_min, n->range_max, n->name, n->fd);
         cursor = cursor->next;
     }
     LOG(INFO, "Cluster succesfully formed\n");

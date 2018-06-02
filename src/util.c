@@ -36,7 +36,7 @@
         perror("No memory available");  \
         return NULL;                    \
     }                                   \
-return ptr;
+    return ptr;
 
 
 /* The implementation here was originally done by Gary S. Brown. Slighltly
@@ -310,3 +310,54 @@ void remove_newline(char *str) {
 }
 
 
+config *create_config(void) {
+    config *conf = malloc(sizeof(config));
+    conf->log_level = DEBUG;
+    conf->name = NULL;
+    conf->host = "127.0.0.1";
+    conf->port = 8081;
+    return conf;
+}
+
+
+void read_config(config *conf, char *filename) {
+    FILE *file = fopen(filename, "r");
+
+    if (file == NULL) {
+        perror("Couldn't open the configuration file\n");
+        free(filename);
+        exit(EXIT_FAILURE);
+    }
+
+    char line[256];
+    int i = 0;
+
+    while (fgets(line, 256, (FILE *) file) != NULL) {
+
+        if (line[0] == '#') {
+            i++;
+            continue;
+        }
+
+        char *cfline;
+        cfline = strstr((char *) line, DELIM);
+        cfline = cfline + strlen(DELIM);
+
+        switch (i) {
+            case 0:
+                memcpy(conf->log_level, cfline, strlen(cfline));
+                break;
+            case 1:
+                memcpy(conf->name, cfline, strlen(cfline));
+                break;
+            case 2:
+                memcpy(conf->host, cfline, strlen(cfline));
+                break;
+            case 3:
+                memcpy(conf->port, cfline, strlen(cfline));
+                break;
+        }
+        i++;
+    }
+    fclose(file);
+}

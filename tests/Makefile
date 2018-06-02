@@ -9,7 +9,6 @@ SRC=../src/map.c 		\
 	../src/persistence.c\
 	../src/networking.c \
 	../src/serializer.c \
-	../src/queue.c 		\
 	../src/list.c
 
 

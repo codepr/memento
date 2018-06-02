@@ -9,7 +9,6 @@ SRC=src/map.c 			\
 	src/serializer.c 	\
 	src/hashing.h 		\
 	src/cluster.c 		\
-	src/queue.c			\
 	src/event.c			\
 	src/list.c
 

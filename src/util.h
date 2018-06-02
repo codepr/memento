@@ -51,6 +51,21 @@ const char *get_homedir(void);
 char *append_string(const char *, const char *);
 void remove_newline(char *);
 
+/* conf */
+
+#define DELIM "="
+
+typedef struct {
+    loglevel log_level;
+    const char *name;
+    const char *host;
+    int port;
+} config;
+
+config *create_config();
+void read_config(config *, char *);
+
+/* logging */
 
 void s_log(loglevel, const char *, ...);
 

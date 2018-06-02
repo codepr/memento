@@ -34,10 +34,6 @@
 #include "util.h"
 
 
-/* Private functions declarations */
-// static void get_clusterinfo(int sfd);
-
-
 command command_entries[] = {
 	{"set", set_command, reply_default},
 	{"get", get_command, reply_data},
@@ -673,28 +669,3 @@ void *flush_command(char *cmd) {
 	*ret = OK;
     return ret;
 }
-
-
-/*
- * CLUSTERINFO command handler, collect some informations of the cluster, used
- * as a private function.
- *
- */
-// static void get_clusterinfo(int sfd) {
-//     if (instance.cluster_mode == 1) {
-//         char info[1024 * instance.cluster->len];
-//         int pos = 0;
-//         list_node *cursor = instance.cluster->head;
-//         while (cursor) {
-//             cluster_node *n = (cluster_node *) cursor->data;
-//             int size = strlen(n->name) + strlen(n->addr) + 47; // 47 for literal string
-//             char *status = "reachable";
-//             if (n->state == UNREACHABLE) status = "unreachable";
-//             snprintf(info + pos, size, "%s - %s:%d - Key range: %d - %d %s\n", n->name,
-//                     n->addr, n->port, n->range_min, n->range_max, status);
-//             pos += size;
-//             cursor = cursor->next;
-//         }
-//         schedule_write(sfd, info, pos, 0);
-//     }
-// }

@@ -109,8 +109,7 @@ int cluster_contained(cluster_node *node) {
  * Checks if the cluster node is in a REACHABLE state
  */
 int cluster_reachable(cluster_node *node) {
-    if (node->state == REACHABLE) return 1;
-    else return 0;
+    return node->state == REACHABLE ? 1 : 0;
 }
 
 
@@ -129,25 +128,33 @@ int cluster_unreachable_count(void) {
 }
 
 
-/*
- * Sets the cluster node contained in the cluster list to state st
- * instance.
- */
-int cluster_set_state(cluster_node *node, state st) {
+static cluster_node *find_node(const char *host, int port) {
     /* Start from head node */
     list_node *cursor = instance.cluster->head;
     /* cycle till cursor != NULL */
     while (cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
-        if ((strncmp(n->addr, node->addr, strlen(node->addr))) == 0
-                && n->port == node->port) {
+        if ((strncmp(n->addr, host, strlen(host))) == 0 && n->port == port) {
             /* found a match */
-            n->state = st;
-            return 1;
+            return n;
         }
         cursor = cursor->next; // move the pointer forward
     }
     /* node is not present */
+    return NULL;
+}
+
+
+/*
+ * Sets the cluster node contained in the cluster list to state st
+ * instance.
+ */
+int cluster_set_state(cluster_node *node, state st) {
+    cluster_node *n = find_node(node->addr, node->port);
+    if (n) {
+        n->state = st;
+        return 1;
+    }
     return 0;
 }
 
@@ -157,20 +164,7 @@ int cluster_set_state(cluster_node *node, state st) {
  * FIXME: repeated code
  */
 cluster_node *cluster_get_node(const char *host, char *port) {
-    /* Start from head node */
-    list_node *cursor = instance.cluster->head;
-    /* cycle till cursor != NULL */
-    while (cursor) {
-        cluster_node *n = (cluster_node *) cursor->data;
-        if ((strncmp(n->addr, host, strlen(host))) == 0
-                && n->port == GETINT(port)) {
-            /* found a match */
-            return n;
-        }
-        cursor = cursor->next; // move the pointer forward
-    }
-    /* node is not present */
-    return NULL;
+    return find_node(host, GETINT(port));
 }
 
 
