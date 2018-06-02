@@ -201,6 +201,8 @@ int is_integer(const char *s) {
 
 /* auxiliary function to check wether a string is a floating number */
 int is_float(const char *s) {
+    if (is_integer(s))
+        return 0;
     double dnum;
     if (sscanf(s, "%lf", &dnum) == 0) return 0;
     return 1;
@@ -341,23 +343,24 @@ void read_config(config *conf, char *filename) {
 
         char *cfline;
         cfline = strstr((char *) line, DELIM);
+        cfline = strstr((char *) line, DELIM);
         cfline = cfline + strlen(DELIM);
 
-        switch (i) {
-            case 0:
-                memcpy(conf->log_level, cfline, strlen(cfline));
-                break;
-            case 1:
-                memcpy(conf->name, cfline, strlen(cfline));
-                break;
-            case 2:
-                memcpy(conf->host, cfline, strlen(cfline));
-                break;
-            case 3:
-                memcpy(conf->port, cfline, strlen(cfline));
-                break;
+        if (strcmp(line, "loglevel") == 0) {
+            if (strcmp(cfline, "debug") == 0)
+                conf->log_level = DEBUG;
+            else if (strcmp(cfline, "info") == 0)
+                conf->log_level = INFO;
+            else conf->log_level = ERR;
+        } else if (strcmp(line, "nodename") == 0) {
+            cfline = cfline + strlen(DELIM);
+            conf->name = strdup(cfline);
+        } else if (strcmp(line, "host") == 0) {
+            conf->host = strdup(cfline);
+        } else if (strcmp(line, "port") == 0) {
+            conf->port = GETINT(cfline);
         }
-        i++;
     }
     fclose(file);
+    DEBUG("Configuration file %s succesfully read", filename);
 }

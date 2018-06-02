@@ -47,7 +47,7 @@ char *serialize(struct message msg) {
     *((int*) metadata) = mlen;
     *((int*) fd) = msg.fd;
     *((unsigned int*) fp) = msg.ready;
-    strncpy(content, msg.content, mlen);
+    strcpy(content, msg.content);
     return serialized;
 }
 
@@ -65,7 +65,7 @@ struct message deserialize(char *serialized_msg) {
     msg.fd = *((int *) fd);
     msg.ready = *((unsigned int *) fp);
     msg.content = malloc((mlen + 1) * sizeof(char));
-    strncpy(msg.content, content, mlen);
-    msg.content[mlen] = '\0';
+    strcpy(msg.content, content);
+    /* msg.content[mlen] = '\0'; */
     return msg;
 }

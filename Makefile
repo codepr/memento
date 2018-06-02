@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=gnu99 -Wall -lrt -lpthread -O3 -pedantic
-RELEASE=./release
+BIN=./bin
 SRC=src/map.c 			\
 	src/util.c 			\
 	src/commands.c 		\
@@ -13,16 +13,16 @@ SRC=src/map.c 			\
 	src/list.c
 
 memento: $(SRC)
-	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) src/memento.c -o $(RELEASE)/memento
+	mkdir -p $(BIN) && $(CC) $(CFLAGS) $(SRC) src/memento.c -o $(BIN)/memento
 
 memento-cli: src/memento-cli.c
-	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) src/memento-cli.c -o $(RELEASE)/memento-cli
+	mkdir -p $(BIN) && $(CC) $(CFLAGS) $(SRC) src/memento-cli.c -o $(BIN)/memento-cli
 
 memento-benchmark: src/memento-benchmark.c
-	mkdir -p $(RELEASE) && $(CC) $(CFLAGS) $(SRC) src/memento-benchmark.c -o $(RELEASE)/memento-benchmark
+	mkdir -p $(BIN) && $(CC) $(CFLAGS) $(SRC) src/memento-benchmark.c -o $(BIN)/memento-benchmark
 
 test:
 	cd tests && $(MAKE) test
 
 clean:
-	rm -f $(RELEASE)/memento $(RELEASE)/dt_test $(RELEASE)/memento-benchmark
+	rm -f $(BIN)/memento $(BIN)/dt_test $(BIN)/memento-benchmark

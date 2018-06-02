@@ -77,32 +77,32 @@ at most 4096 keys.
 ### Build
 
 To build the source just run `make`. A `memento` executable will be generated into
-a `release` directory that can be started to listen on a defined `hostname`,
+a `bin` directory that can be started to listen on a defined `hostname`,
 ready to receive commands from any TCP client
 
-    $ ./release/memento -a <hostname> -p <port>
+    $ ./bin/memento -a <hostname> -p <port>
 
 `-c` for a cluster mode start
 
-    $ ./release/memento -a <hostname> -p <port> -c
+    $ ./bin/memento -a <hostname> -p <port> -c
 
 Parameter `<hostname>` and `<port>` fallback to 127.0.0.1 and 6737, memento accept also
 a -f parameter, it allows to specify a configuration file for cluster context.
 
-    $ ./release/memento -a <hostname> -p <port> -c -f ./conf/node0.conf
+    $ ./bin/memento -a <hostname> -p <port> -c -f ./conf/node0.conf
 
 The name of the node can be overridden with the `-i` option
 
-    $ ./release/memento -a <hostname> -p <port> -c -f <path-to-conf> -i <name-id>
+    $ ./bin/memento -a <hostname> -p <port> -c -f <path-to-conf> -i <name-id>
 
 It is also possible to stress-test the application by using `memento-benchmark`, previously
 generating it with `make memento-benchmark` command
 
-    $ ./release/memento-benchmark <hostname> <port>
+    $ ./bin/memento-benchmark <hostname> <port>
 
 To build memento-cli just `make memento-cli` and run it like the following:
 
-    $ ./release/memento-cli <hostname> <port>
+    $ ./bin/memento-cli <hostname> <port>
 
 ### Experimental
 

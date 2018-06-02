@@ -74,10 +74,11 @@ void *reply_data(reply *rep) {
 		schedule_write(p);
 	}
 	else {
+	 	DEBUG("Reply data to client %s\n", rep->data);
+        rep->data = append_string(rep->data, "\r\n");
 		p->data = rep->data;
 	 	p->size = strlen(rep->data);
 	 	p->tocli = 1;
-	 	DEBUG("Reply data to client %s\n", rep->data);
 	    schedule_write(p);
 	}
 	return NULL;
@@ -185,15 +186,14 @@ int check_command(char *buffer) {
             return END;
 
 		for (int i = 0; i < commands_len(); i++) {
-			if (strncasecmp(command,
-						command_entries[i].name, strlen(command_entries[i].name)) == 0
+			if (strncasecmp(command, command_entries[i].name,
+                        strlen(command_entries[i].name)) == 0
 					&& strlen(command_entries[i].name) == strlen(command)) {
 				return 1;
 			}
 		}
-		return COMMAND_NOT_FOUND;
     }
-    return 0;
+	return COMMAND_NOT_FOUND;
 }
 
 
@@ -296,7 +296,8 @@ int peer_command_handler(int fd) {
 			p->tocli = 1;
 			schedule_write(p);
 		} else if (m.ready == 1) {
-			DEBUG("Answer to client from a query\n");
+			DEBUG("Answer to client from a query %s\n", m.content);
+            m.content = append_string(m.content, "\r\n");
 			/* answer to a query operations to the original client */
 			p->fd = m.fd;
 			p->data = m.content;
@@ -388,6 +389,7 @@ void *set_command(char *cmd) {
     void *key = strtok(cmd, " ");
     if (key) {
         void *val = (char *) key + strlen(key) + 1;
+        remove_newline(val);
         if (val) *ret = map_put(instance.store, strdup(key), strdup(val));
     }
     return ret;
