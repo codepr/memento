@@ -162,10 +162,6 @@ int listento(const char *host, const char *port) {
         abort();
     }
 
-    if (host == NULL)
-        DEBUG("Instance listening on 127.0.0.1:%s\n", port);
-    else DEBUG("Instance listening on %s:%s\n", host, port);
-
     return sfd;
 }
 
@@ -243,7 +239,9 @@ static void *worker(void *args) {
             } else if (events[i].events & EPOLLOUT) {
 
 				peer_t *p = (peer_t *) events[i].data.ptr;
-				DEBUG("Answering to client from worker %d\n", p->fd);
+                if (instance.verbose) {
+				    DEBUG("Answering to client from worker %d\n", p->fd);
+                }
                 SET_FD_IN(instance.el.bepollfd, p->fd);
 
                 if (send_all(p->fd, p->data, (int *) &p->size) < 0)
@@ -288,7 +286,7 @@ static void handle_connection(int fd, int server, int bus) {
     if (fd == server) {
         ADD_FD(instance.el.bepollfd, accept_socket);
         SET_FD_IN(instance.el.epollfd, server);
-        DEBUG("Client connected %s:%s %d\n", hbuf, sbuf, accept_socket);
+        DEBUG("Connection %s:%s\n", hbuf, sbuf);
     }
 
     /* Bus connection check, in this case, the descriptor
@@ -297,7 +295,7 @@ static void handle_connection(int fd, int server, int bus) {
     if (fd == bus) {
         ADD_FD(instance.el.epollfd, accept_socket);
         SET_FD_IN(instance.el.epollfd, bus);
-        DEBUG("Node connected %s:%s %d\n", hbuf, sbuf, accept_socket);
+        DEBUG("New node connected %s:%s\n", hbuf, sbuf);
     }
 }
 
@@ -309,11 +307,11 @@ static int handle_input(int fd) {
      */
     int done = 0;
     if (instance.lock == 0) {
-        DEBUG("Handling request from %d\n", fd);
+        if (instance.verbose) DEBUG("Handling request from %d\n", fd);
         done = (instance.el.cluster_handler)(fd);
         if (done == END) {
             /* close the connection */
-            DEBUG("Closing connection request\n");
+            DEBUG("Closing connection\n");
             close(fd);
             return -1;
         }
@@ -324,7 +322,7 @@ static int handle_input(int fd) {
 
 static void handle_output(void *ptr) {
     peer_t *p = (peer_t *) ptr;
-    DEBUG("Send to fd %d\n", p->fd);
+    if (instance.verbose) DEBUG("Send to fd %d\n", p->fd);
     SET_FD_IN(instance.el.epollfd, p->fd);
     if (send_all(p->fd, p->data, (int *) &p->size) < 0)
         perror("Send data failed");
@@ -415,10 +413,14 @@ int start_loop(void) {
  */
 void schedule_write(peer_t *p) {
 	if (p->tocli == 0) {
-        DEBUG("Scheduled write to peer fd: %d\n", p->fd);
+        if (instance.verbose) {
+            DEBUG("Scheduled write to peer fd: %d\n", p->fd);
+        }
         SET_FD_OUT(instance.el.epollfd, p->fd, p);
     } else {
-        DEBUG("Scheduled write to client\n");
+        if (instance.verbose) {
+            DEBUG("Scheduled write to client\n");
+        }
         SET_FD_OUT(instance.el.bepollfd, p->fd, p);
     }
 }

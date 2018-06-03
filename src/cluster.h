@@ -29,7 +29,7 @@
 #include "networking.h"
 
 
-#define PARTITIONS 8192   // whole keyspace
+#define PARTITIONS  8192   // whole keyspace
 
 
 typedef enum { REACHABLE, UNREACHABLE } state;
@@ -55,6 +55,7 @@ typedef struct {
     map *store;                     // items of the DB
     list *cluster;                  // map of cluster nodes
     loglevel log_level;             // log level of the entire system
+    unsigned int verbose : 1;       // verbosity for logs
 } memento;
 
 

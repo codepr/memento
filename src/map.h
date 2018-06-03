@@ -26,8 +26,6 @@
 #define MAP_OK              0
 #define MAP_ERR             -1
 #define MAP_FULL            -2
-#define INITIAL_SIZE        256
-#define MAX_CHAIN_LENGTH    8
 
 
 typedef int (*func)(void *, void *);

@@ -70,17 +70,16 @@ void *reply_data(reply *rep) {
 		p->data = payload;
 		p->size = strlen(response) + S_OFFSET;
 		p->tocli = 0;
-		DEBUG("Reply data to peer\n");
-		schedule_write(p);
+		if (instance.verbose) DEBUG("Reply data to peer\n");
 	}
 	else {
-	 	DEBUG("Reply data to client %s\n", rep->data);
+	 	if (instance.verbose) DEBUG("Reply data to client %s\n", rep->data);
         rep->data = append_string(rep->data, "\r\n");
 		p->data = rep->data;
 	 	p->size = strlen(rep->data);
 	 	p->tocli = 1;
-	    schedule_write(p);
 	}
+	schedule_write(p);
 	return NULL;
 }
 
@@ -118,7 +117,9 @@ void *reply_default(reply *rep) {
 		p->size = len;
 		p->alloc = 1;
 		p->tocli = 0;
-		DEBUG("Response to peer node at %d with %s\n", rep->sfd, msg.content);
+        if (instance.verbose) {
+		    DEBUG("Response to peer node at %d with %s\n", rep->sfd, msg.content);
+        }
 	}
 	else {
 		switch (resp) {
@@ -158,8 +159,8 @@ void execute(char *buffer, int sfd, int rfd, int fp) {
     if (command) {
         /* check if the buffer contains a valid command */
         for (int i = 0; i < commands_len(); i++) {
-            if (strncasecmp(command,
-						command_entries[i].name, strlen(command_entries[i].name)) == 0
+            if (strncasecmp(command, command_entries[i].name,
+                        strlen(command_entries[i].name)) == 0
                     && strlen(command_entries[i].name) == strlen(command)) {
 				rep->data = (*command_entries[i].func)(buffer + strlen(command) + 1);
 				(*command_entries[i].callback)(rep);
@@ -211,7 +212,9 @@ static int hash(char *key) {
         int idx = murmur3_32((const uint8_t *) holder,
                 strlen(holder), seed) % PARTITIONS;
 
-        DEBUG("Destination node: %d for key %s\r\n", idx, holder);
+        if (instance.verbose) {
+            DEBUG("Destination node: %d for key %s\r\n", idx, holder);
+        }
         free(holder);
         return idx;
     } else return -1;
@@ -245,7 +248,9 @@ static void route_command(int idx, int fd, char *b, struct message *msg) {
 				p->data = payload;
 				p->size = strlen(b) + S_OFFSET;
 				p->tocli = 0;
-                DEBUG("Redirect toward cluster member %s\n", n->name);
+                if (instance.verbose) {
+                    DEBUG("Redirect toward cluster member %s\n", n->name);
+                }
                 schedule_write(p);
                 break;
             }
@@ -273,41 +278,35 @@ int peer_command_handler(int fd) {
 	}
     else {
 		peer_t *p = (peer_t *) malloc(sizeof(peer_t));
-		/* message came from a peer node, so it is serialized */
+    	/* message came from a peer node, so it is serialized */
 		struct message m = deserialize(buf); // deserialize into message structure
-		DEBUG("Received data from peer node, message: %s\n", m.content);
-
+        p->alloc = 1;
+		p->tocli = 1;
+		p->fd = m.fd;
+	    if (instance.verbose) {
+		    DEBUG("Received data from peer node, message: %s\n", m.content);
+        }
 		if (strcmp(m.content, S_OK) == 0
 				|| strcmp(m.content, S_NIL) == 0
 				|| strcmp(m.content, S_UNK) == 0) {
-			DEBUG("Answer to client\n");
-			p->fd = m.fd;
-			p->alloc = 0;
-			/* answer to the original client */
-			if (strcmp(m.content, S_OK) == 0) {
-				p->data = S_OK;
-			} else if (strcmp(m.content, S_NIL) == 0) {
-				p->data = S_NIL;
-			} else if (strcmp(m.content, S_UNK) == 0) {
-				p->data = S_UNK;
-			}
-			p->size = strlen(p->data);
-			p->alloc = 0;
-			p->tocli = 1;
-			schedule_write(p);
+            if (instance.verbose) DEBUG("Answer to client\n");
+            p->data = m.content;
+            p->size = strlen(p->data);
+            schedule_write(p);
 		} else if (m.ready == 1) {
-			DEBUG("Answer to client from a query %s\n", m.content);
+            if (instance.verbose) {
+			    DEBUG("Answer to client from a query %s\n", m.content);
+            }
             m.content = append_string(m.content, "\r\n");
 			/* answer to a query operations to the original client */
-			p->fd = m.fd;
 			p->data = m.content;
 			p->size = strlen(m.content);
-			p->alloc = 1;
-			p->tocli = 1;
 			schedule_write(p);
 		} else {
 			/* message from another node */
-			DEBUG("Answer to another node, processing inst: %s\n", m.content);
+            if (instance.verbose) {
+			    DEBUG("Answer to another node: %s\n", m.content);
+            }
 			execute(m.content, fd, m.fd, 1);
 		}
 	}
@@ -341,12 +340,10 @@ int client_command_handler(int fd) {
 		if (check == 1) {
 			if (instance.cluster_mode == 1) {
 				/* message came directly from a client */
-				char *command = NULL, *b = strdup(buf); // payload to send
-				command = strtok(buf, " \r\n");
-				DEBUG("Command : %s\n", command);
+                char *b = strdup(buf); // payload to send
+				strtok(buf, " \r\n");
 				/* command is handled and it isn't an informative one */
 				char *arg_1 = strtok(NULL, " ");
-				DEBUG("Key : %s\n", arg_1);
 				int idx = hash(arg_1);
 				/* route the command to the correct node */
 				route_command(idx, fd, b, &msg);

@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -32,19 +33,21 @@
 #include "networking.h"
 
 
+static void exit_handler(int sig) {
+    signal(sig, SIG_IGN);
+    cluster_destroy();
+    INFO("Shutting down, closing all listening sockets\n");
+}
+
+
 /*
  * The only thread used in the system, just for connect all nodes defined
  * in the configuration file
  */
 static void *form_cluster_thread(void *p) {
-
     int len = 0;
-    sleep(2);
-
     while (instance.lock == 1) {
-
         list_node *cursor = instance.cluster->head;
-
         while (cursor) {
             /* count for UNREACHABLE nodes */
             len = cluster_unreachable_count();
@@ -58,12 +61,9 @@ static void *form_cluster_thread(void *p) {
             }
             cursor = cursor->next;
         }
-
         if (len <= 0) instance.lock = 0; // all nodes are connected, release lock
-
         sleep(3);
     }
-
     DEBUG("Cluster node succesfully joined to the cluster\n");
     cluster_balance();
 	DEBUG("Keyspace correctly balanced\n");
@@ -72,15 +72,16 @@ static void *form_cluster_thread(void *p) {
     list_node *cursor = instance.cluster->head;
     while (cursor) {
         cluster_node *n = (cluster_node *) cursor->data;
-		DEBUG("%s:%d -> [%u,%u]\n", n->addr, n->port, n->range_min, n->range_max);
+		DEBUG("\t%s:%d -> [%u,%u]\n", n->addr, n->port, n->range_min, n->range_max);
         cursor = cursor->next;
     }
-    LOG(INFO, "Cluster succesfully formed\n");
+    INFO("Cluster succesfully formed\n");
     return NULL;
 }
 
 
 int main(int argc, char **argv) {
+     signal(SIGINT, exit_handler);
 
     /* Initialize random seed */
     srand((unsigned int) time(NULL));
@@ -127,10 +128,13 @@ int main(int argc, char **argv) {
     int bport = GETINT(port) + 100;
     sprintf(bus_port, "%d", bport);
 
+    INFO("Memento version v1.0.0\n");
+    INFO("Listening on %s:%s\n", address, port);
+
     /* If cluster mode is enabled Initialize cluster map */
     if (cluster_mode == 1) {
 
-		INFO("Cluster mode started, reading configuration\n");
+		INFO("Cluster mode enabled; configuration=%s\n", filename);
 
 		init_system(1, id, address, port, bus_port);
 
@@ -145,9 +149,13 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
 
+        INFO("Applying cluster configuration:\n");
+
         while (fgets(line, 256, (FILE *) file) != NULL) {
 
-            char *ip = malloc(15), *pt = malloc(5), *name = calloc(1, 256);
+            char *ip = malloc(15);
+            char *pt = malloc(5);
+            char *name = calloc(1, 256);
             int self_flag = 0;
             linenr++;
 
@@ -159,7 +167,7 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            DEBUG("[CFG] Line %d: IP %s PORT %s NAME %s SELF %d\n",
+            DEBUG("\tNode #%d ip %s port %s name %s self %d\n",
                     linenr, ip, pt, name, self_flag);
 
             if (GETINT(pt) > 65435) {
@@ -173,6 +181,7 @@ int main(int argc, char **argv) {
             new_node->addr = ip;
             new_node->port = GETINT(pt) + 100;
             new_node->state = UNREACHABLE;
+            free(pt);
 
             if (self_flag == 1) {
                 /* check if the node is already present */

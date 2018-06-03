@@ -27,6 +27,10 @@
 #include "util.h"
 
 
+const unsigned int INITIAL_SIZE = 256;
+const unsigned int MAX_CHAIN_LENGTH = 8;
+
+
 /*
  * Hashing function for a string
  */

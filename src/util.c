@@ -267,24 +267,29 @@ void s_log(loglevel level, const char *info, ...) {
     if (level <= instance.log_level) {
         va_list argptr;
         va_start(argptr, info);
-        char time_buff[100];
-        char prefix[10];
-        switch(level) {
-            case DEBUG:
-                sprintf(prefix, "[DBG]");
-                break;
-            case ERR:
-                sprintf(prefix, "\033[1m[ERR]");
-                break;
-            case INFO:
-                sprintf(prefix, "[INF]");
-                break;
-            default:
-                sprintf(prefix, "[INF]");
-                break;
-        }
+        char time_buff[50];
+        char prefix[50];
         time_t now = time(0);
-        strftime(time_buff, 100, "[%Y-%m-%d %H:%M:%S] - ", localtime(&now));
+        if (1 == instance.verbose) {
+            switch(level) {
+                case DEBUG:
+                    sprintf(prefix, "[DBG]");
+                    break;
+                case ERR:
+                    sprintf(prefix, "\033[1m[ERR]");
+                    break;
+                case INFO:
+                    sprintf(prefix, "[INF]");
+                    break;
+                default:
+                    sprintf(prefix, "[INF]");
+                    break;
+            }
+            strftime(time_buff, 50, "[%Y-%m-%d %H:%M:%S] - ", localtime(&now));
+        } else  {
+            strftime(prefix, 50, "%Y-%m-%d %H:%M:%S", localtime(&now));
+            sprintf(time_buff, " ");
+        }
         char content[strlen(prefix) + strlen(info) + strlen(time_buff)];
         memset(content, 0x00, strlen(content));
         strcat(content, prefix);

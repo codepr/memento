@@ -66,6 +66,5 @@ struct message deserialize(char *serialized_msg) {
     msg.ready = *((unsigned int *) fp);
     msg.content = malloc((mlen + 1) * sizeof(char));
     strcpy(msg.content, content);
-    /* msg.content[mlen] = '\0'; */
     return msg;
 }

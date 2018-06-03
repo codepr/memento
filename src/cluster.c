@@ -46,6 +46,7 @@ void init_system(int distributed, const char *id,
     instance.store = map_create();
     instance.cluster = list_create();
     instance.log_level = DEBUG;
+    instance.verbose = 0;
 
 	init_event_loop(host, server_port, cluster_port);
 
@@ -71,6 +72,7 @@ void cluster_destroy(void) {
     /* deallocate instance containers */
     map_release(instance.store);
     list_release(instance.cluster);
+    free((char *) self.name);
 }
 
 
